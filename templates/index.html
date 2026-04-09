@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FC Inventory Tool</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>FC Inventory Tool</h1>
+            <p class="subtitle">FusionCompute Inventory Collector</p>
+        </header>
+
+        <!-- State 1: Connection Form -->
+        <div id="form-section">
+            <div class="form-row">
+                <div class="form-group form-group-host">
+                    <label for="host">FusionCompute Host / IP</label>
+                    <input type="text" id="host" placeholder="e.g. 192.168.1.100" autocomplete="off">
+                </div>
+                <div class="form-group form-group-port">
+                    <label for="port">Port</label>
+                    <input type="number" id="port" value="7443" min="1" max="65535">
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" placeholder="e.g. admin" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" placeholder="Password">
+            </div>
+            <button id="btn-collect" onclick="startCollection()">Collect Inventory</button>
+            <div class="divider"><span>or</span></div>
+            <button id="btn-demo" class="btn-demo" onclick="startDemo()">Demo Mode (Mock Data)</button>
+            <div id="form-error" class="error" style="display:none;"></div>
+        </div>
+
+        <!-- State 2: Progress -->
+        <div id="progress-section" style="display:none;">
+            <div class="progress-info">
+                <div class="spinner"></div>
+                <p id="step-text">Connecting...</p>
+            </div>
+            <div class="progress-track">
+                <div id="progress-bar" class="progress-fill" style="width: 0%;"></div>
+            </div>
+            <p id="percent-text" class="percent">0%</p>
+            <button class="btn-cancel" onclick="cancelCollection()">Cancel</button>
+        </div>
+
+        <!-- State 3: Result -->
+        <div id="result-section" style="display:none;">
+            <!-- Success -->
+            <div id="success-box" class="result-box success" style="display:none;">
+                <div class="result-icon">&#10004;</div>
+                <h2>Collection Complete!</h2>
+                <p id="result-summary"></p>
+                <a id="btn-download" href="/api/download" class="btn-download">Download Excel</a>
+            </div>
+            <!-- Error -->
+            <div id="error-box" class="result-box error-box" style="display:none;">
+                <div class="result-icon error-icon">&#10006;</div>
+                <h2>Collection Failed</h2>
+                <p id="error-detail"></p>
+            </div>
+            <button class="btn-secondary" onclick="resetForm()">Collect Again</button>
+        </div>
+
+        <footer>
+            <p>FC Inventory Tool &mdash; Powered by FusionCompute API</p>
+        </footer>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
