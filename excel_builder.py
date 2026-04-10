@@ -42,8 +42,14 @@ def build_excel(data, output_path):
             ws.append(["No data collected"])
             continue
 
-        # Write header row
-        headers = list(rows[0].keys())
+        # Write header row - union of all keys across all rows (preserve order)
+        seen = set()
+        headers = []
+        for row in rows:
+            for key in row.keys():
+                if key not in seen:
+                    seen.add(key)
+                    headers.append(key)
         ws.append(headers)
 
         # Write data rows
