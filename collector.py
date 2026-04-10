@@ -71,30 +71,6 @@ def _power_state(status):
     return status or ""
 
 
-# Map FusionCompute internal storage type codes to readable names
-STORAGE_TYPE_MAP = {
-    "LOCALPOME":      "Local",
-    "LUNPOME":        "SAN/LUN",
-    "ADVANCEDSAN":    "Advanced SAN",
-    "NAS":            "NAS",
-    "NFS":            "NFS",
-    "FUSIONSTORAGE":  "FusionStorage",
-    "OCEANSTOR":      "OceanStor",
-    "DSWARE":         "DSware",
-    "IPSAN":          "iSCSI SAN",
-    "FCSAN":          "FC SAN",
-    "VIMS":           "VIMS",
-}
-
-
-def _translate_storage_type(raw):
-    """Translate FC storage type code to readable name."""
-    if not raw:
-        return ""
-    upper = str(raw).upper()
-    return STORAGE_TYPE_MAP.get(upper, raw)
-
-
 # ── Field Mappings ──────────────────────────────────────────
 
 VM_FIELDS = OrderedDict([
@@ -641,7 +617,7 @@ class InventoryCollector:
                 ds_urn = _try_paths(disk, ["datastoreUrn"])
                 row["Datastore"] = self.datastore_map.get(ds_urn, ds_urn)
                 row["Datastore URN"] = ds_urn
-                row["Storage Type"] = _translate_storage_type(_try_paths(disk, ["storageType"]))
+                row["Storage Type"] = _try_paths(disk, ["storageType"])
                 row["Independent"] = _try_paths(disk, ["indepDisk"])
                 row["Persistent"] = _try_paths(disk, ["persistentDisk"])
                 row["Volume URN"] = _try_paths(disk, ["volumeUrn"])
@@ -741,8 +717,7 @@ class InventoryCollector:
         for ds in self.datastores:
             row = OrderedDict()
             row["Datastore Name"] = _try_paths(ds, ["name"])
-            row["Storage Type"] = _translate_storage_type(_try_paths(ds, ["storageType"]))
-            row["Storage Type (raw)"] = _try_paths(ds, ["storageType"])
+            row["Storage Type"] = _try_paths(ds, ["storageType"])
 
             # Capacity: try GB first, then MB conversion
             cap = _try_paths(ds, ["capacityGB"])
