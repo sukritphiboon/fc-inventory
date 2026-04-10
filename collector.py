@@ -71,6 +71,30 @@ def _power_state(status):
     return status or ""
 
 
+# Map FusionCompute internal storage type codes to readable names
+STORAGE_TYPE_MAP = {
+    "LOCALPOME":      "Local",
+    "LUNPOME":        "SAN/LUN",
+    "ADVANCEDSAN":    "Advanced SAN",
+    "NAS":            "NAS",
+    "NFS":            "NFS",
+    "FUSIONSTORAGE":  "FusionStorage",
+    "OCEANSTOR":      "OceanStor",
+    "DSWARE":         "DSware",
+    "IPSAN":          "iSCSI SAN",
+    "FCSAN":          "FC SAN",
+    "VIMS":           "VIMS",
+}
+
+
+def _translate_storage_type(raw):
+    """Translate FC storage type code to readable name."""
+    if not raw:
+        return ""
+    upper = str(raw).upper()
+    return STORAGE_TYPE_MAP.get(upper, raw)
+
+
 # ── Field Mappings ──────────────────────────────────────────
 
 VM_FIELDS = OrderedDict([
@@ -363,6 +387,19 @@ class InventoryCollector:
                     except Exception as e:
                         logger.warning(f"Failed to get portgroups for DVS {dvs_name}: {e}")
 
+                # Fallback: try fetching all portgroups at site level
+                if not self.portgroups:
+                    try:
+                        site_pgs = self.client.get_site_portgroups(site_uri)
+                        for pg in site_pgs:
+                            pg.setdefault("_dvswitch_name", "")
+                        self.portgroups.extend(site_pgs)
+                        if site_pgs and not getattr(self, "_pg_logged", False):
+                            self._log_sample("PORTGROUP (site-level)", site_pgs[0])
+                            self._pg_logged = True
+                    except Exception as e:
+                        logger.warning(f"Site portgroup fallback failed: {e}")
+
                 # Step 7: VMs
                 self._update_progress(45, "Fetching VM list...")
                 vms = self.client.get_vms(site_uri)
@@ -589,16 +626,14 @@ class InventoryCollector:
     def _build_vdisk(self):
         rows = []
         for vm in self.vms:
-            merged = self._merged_vm(vm)
             urn = vm.get("urn", "")
-            vm_uuid = _try_paths(merged, ["uuid"])
             disks = self.vm_disks.get(urn, [])
             for disk in disks:
                 row = OrderedDict()
                 row["VM Name"] = vm.get("name", "")
-                row["VM UUID"] = vm_uuid
                 row["Power"] = _power_state(vm.get("status", ""))
-                row["Disk Name"] = _try_paths(disk, ["volumeUuid", "volumeUrn", "name"])
+                row["Disk Name"] = _try_paths(disk, ["name", "volumeName"])
+                row["Disk UUID"] = _try_paths(disk, ["volumeUuid"])
                 row["Capacity (GB)"] = _try_paths(disk, ["quantityGB"])
                 row["Bus Type"] = _try_paths(disk, ["pciType", "busType"])
                 row["Thin Provision"] = _try_paths(disk, ["isThin", "thinFlag"])
@@ -606,7 +641,7 @@ class InventoryCollector:
                 ds_urn = _try_paths(disk, ["datastoreUrn"])
                 row["Datastore"] = self.datastore_map.get(ds_urn, ds_urn)
                 row["Datastore URN"] = ds_urn
-                row["Storage Type"] = _try_paths(disk, ["storageType"])
+                row["Storage Type"] = _translate_storage_type(_try_paths(disk, ["storageType"]))
                 row["Independent"] = _try_paths(disk, ["indepDisk"])
                 row["Persistent"] = _try_paths(disk, ["persistentDisk"])
                 row["Volume URN"] = _try_paths(disk, ["volumeUrn"])
@@ -706,7 +741,8 @@ class InventoryCollector:
         for ds in self.datastores:
             row = OrderedDict()
             row["Datastore Name"] = _try_paths(ds, ["name"])
-            row["Storage Type"] = _try_paths(ds, ["storageType"])
+            row["Storage Type"] = _translate_storage_type(_try_paths(ds, ["storageType"]))
+            row["Storage Type (raw)"] = _try_paths(ds, ["storageType"])
 
             # Capacity: try GB first, then MB conversion
             cap = _try_paths(ds, ["capacityGB"])

@@ -306,4 +306,21 @@ class FCClient:
     def get_portgroups(self, dvswitch_uri):
         """Get port groups of a DVSwitch. dvswitch_uri = full URI from dvswitch list."""
         data = self._get(f"{dvswitch_uri}/portgroups")
-        return data.get("portgroups", data.get("items", []))
+        result = data.get("portgroups", data.get("portGroups", data.get("items", [])))
+        if not result and isinstance(data, list):
+            result = data
+        logger.info(f"Found {len(result)} port groups under {dvswitch_uri}")
+        return result
+
+    def get_site_portgroups(self, site_uri):
+        """Get all port groups in a site (fallback when DVSwitch listing is empty)."""
+        try:
+            data = self._get(f"{site_uri}/portgroups")
+            result = data.get("portgroups", data.get("portGroups", data.get("items", [])))
+            if not result and isinstance(data, list):
+                result = data
+            logger.info(f"Found {len(result)} port groups at site level")
+            return result
+        except Exception as e:
+            logger.warning(f"Site-level portgroup query failed: {e}")
+            return []
