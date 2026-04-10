@@ -44,30 +44,6 @@ window.addEventListener("DOMContentLoaded", function () {
     }
 });
 
-// ── Demo Mode ───────────────────────────────────────────
-function startDemo() {
-    hideFormError();
-
-    fetch("/api/collect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ host: "mock", username: "mock", password: "mock", mock: true }),
-    })
-        .then((resp) => {
-            if (!resp.ok) return resp.json().then((d) => Promise.reject(d));
-            return resp.json();
-        })
-        .then(() => {
-            document.getElementById("form-section").style.display = "none";
-            document.getElementById("progress-section").style.display = "block";
-            document.getElementById("result-section").style.display = "none";
-            pollTimer = setInterval(pollProgress, 1000);
-        })
-        .catch((err) => {
-            showFormError(err.error || "Failed to start demo.");
-        });
-}
-
 // ── Real Collection ─────────────────────────────────────
 function startCollection() {
     const host = document.getElementById("host").value.trim();

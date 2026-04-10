@@ -5,17 +5,19 @@ Web-based FusionCompute inventory collector with Excel export.
 
 import os
 import sys
+import socket
 import logging
 import logging.handlers
-import tempfile
 import threading
+import webbrowser
 from datetime import datetime
 
 from flask import Flask, render_template, request, jsonify, send_file
 
 from collector import InventoryCollector
 from excel_builder import build_excel
-from mock_data import generate_mock_data
+
+__version__ = "1.0.0"
 
 # Configure logging - console + file
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s - %(message)s"
@@ -29,7 +31,7 @@ else:
 LOG_FILE = os.path.join(_base_dir, "fc_inventory.log")
 
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format=LOG_FORMAT,
     handlers=[
         logging.StreamHandler(),
@@ -41,7 +43,7 @@ logging.basicConfig(
 
 # Quiet down noisy libraries
 logging.getLogger("urllib3").setLevel(logging.WARNING)
-logging.getLogger("werkzeug").setLevel(logging.INFO)
+logging.getLogger("werkzeug").setLevel(logging.WARNING)
 
 app = Flask(__name__)
 
@@ -53,37 +55,10 @@ current_job = {
 }
 
 
-def _run_collection(collector, mock=False):
+def _run_collection(collector):
     """Background thread: collect data and build Excel file."""
     try:
-        if mock:
-            # Simulate collection with mock data
-            import time
-            steps = [
-                (5, "Logging in to FusionCompute (mock)..."),
-                (10, "Fetching sites..."),
-                (15, "Fetching clusters..."),
-                (25, "Fetching hosts..."),
-                (40, "Fetching datastores..."),
-                (50, "Fetching networks..."),
-                (55, "Fetching VM list..."),
-                (75, "Fetching VM details (15/30)..."),
-                (90, "Fetching VM details (30/30)..."),
-                (95, "Processing collected data..."),
-            ]
-            for pct, step in steps:
-                if collector.cancelled:
-                    raise InterruptedError("Collection cancelled by user.")
-                collector.progress["percent"] = pct
-                collector.progress["current_step"] = step
-                time.sleep(0.5)
-
-            data = generate_mock_data()
-            collector.progress["percent"] = 100
-            collector.progress["current_step"] = "Collection complete!"
-            collector.progress["status"] = "done"
-        else:
-            data = collector.collect_all()
+        data = collector.collect_all()
 
         # Generate output file next to exe/script (not in temp)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -129,9 +104,8 @@ def start_collection():
     port = int(body.get("port", 7443))
     username = body.get("username", "").strip()
     password = body.get("password", "")
-    mock = body.get("mock", False)
 
-    if not mock and (not host or not username or not password):
+    if not host or not username or not password:
         return jsonify({"error": "Host, username, and password are required."}), 400
 
     # Clean up old output file
@@ -142,16 +116,11 @@ def start_collection():
             pass
 
     # Create collector and start background thread
-    if mock:
-        collector = InventoryCollector("mock-host", "mock-user", "mock-pass")
-        collector.progress["status"] = "running"
-    else:
-        collector = InventoryCollector(host, username, password, port=port)
-
+    collector = InventoryCollector(host, username, password, port=port)
     current_job["collector"] = collector
     current_job["output_file"] = None
 
-    thread = threading.Thread(target=_run_collection, args=(collector, mock), daemon=True)
+    thread = threading.Thread(target=_run_collection, args=(collector,), daemon=True)
     current_job["thread"] = thread
     thread.start()
 
@@ -193,26 +162,68 @@ def download_file():
     )
 
 
-@app.route("/api/debug", methods=["POST"])
-def debug_api():
-    """Debug: login and fetch raw API response for a given path."""
-    body = request.get_json(silent=True) or {}
-    host = body.get("host", "").strip()
-    port = int(body.get("port", 7443))
-    username = body.get("username", "").strip()
-    password = body.get("password", "")
-    path = body.get("path", "/sites")
+@app.route("/api/version")
+def version():
+    return jsonify({"version": __version__})
 
-    from fc_client import FCClient
-    client = FCClient(host, username, password, port=port)
+
+def _get_lan_ip():
+    """Best-effort LAN IP detection for the startup banner."""
     try:
-        client.login()
-        data = client._get(path)
-        client.logout()
-        return jsonify(data)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+
+def _print_banner(host, port):
+    lan_ip = _get_lan_ip()
+    banner = f"""
+========================================================
+  FC Inventory Tool v{__version__}
+  FusionCompute Inventory Collector
+========================================================
+
+  Open in your browser:
+    -> http://localhost:{port}
+    -> http://{lan_ip}:{port}
+
+  Log file:    {LOG_FILE}
+  Output dir:  {_base_dir}
+
+  Press CTRL+C to stop the server.
+========================================================
+"""
+    print(banner, flush=True)
+
+
+def main():
+    # Bind to localhost by default for security.
+    # Set FC_INVENTORY_BIND=0.0.0.0 to expose on the LAN (use with caution).
+    host = os.environ.get("FC_INVENTORY_BIND", "127.0.0.1")
+    port = int(os.environ.get("FC_INVENTORY_PORT", "5000"))
+
+    _print_banner(host, port)
+
+    # Auto-open browser on startup (only when frozen exe to avoid dev annoyance)
+    if getattr(sys, "frozen", False):
+        try:
+            threading.Timer(1.0, lambda: webbrowser.open(f"http://localhost:{port}")).start()
+        except Exception:
+            pass
+
+    # Try waitress (production WSGI), fall back to Flask dev server
+    try:
+        from waitress import serve
+        logging.info(f"Starting waitress on {host}:{port}")
+        serve(app, host=host, port=port, threads=8, _quiet=True)
+    except ImportError:
+        logging.warning("waitress not installed, using Flask dev server")
+        app.run(host=host, port=port, debug=False, use_reloader=False)
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    main()
