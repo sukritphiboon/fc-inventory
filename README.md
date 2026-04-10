@@ -1,5 +1,10 @@
 # FC Inventory Tool
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Release](https://img.shields.io/github/v/release/sukritphiboon/fc-inventory)](https://github.com/sukritphiboon/fc-inventory/releases)
+[![Build](https://github.com/sukritphiboon/fc-inventory/actions/workflows/build-release.yml/badge.svg)](https://github.com/sukritphiboon/fc-inventory/actions/workflows/build-release.yml)
+[![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
+
 A web-based inventory collector for Huawei FusionCompute, similar to RVTools for VMware. Connects to the FusionCompute VRM REST API, gathers infrastructure data (VMs, hosts, clusters, datastores, networks), and exports to a multi-sheet Excel workbook.
 
 **Version:** 1.0.0
@@ -196,10 +201,72 @@ If you need to expose this on a network:
 
 ### Why this tool is not malicious
 - **Source code is fully open** in this repository — every line is auditable
-- **No outbound network calls** except to the FusionCompute VRM you specify
+- **No outbound network calls** except to the FusionCompute VRM you specify (see Network Behavior below)
 - **No telemetry, analytics, or auto-update** — runs entirely offline (apart from FC API calls)
 - **No persistence** — does not install services, scheduled tasks, registry entries, or background processes
-- **Build is reproducible** — run `build.bat` against the same git commit to verify the binary
+- **Reproducible build** — run `build.bat` against the same git commit to verify the binary
+- **Built by GitHub Actions** — the official .exe attached to each release is built by `.github/workflows/build-release.yml` running on GitHub's infrastructure, not on a developer machine. The build log is publicly auditable
+
+### Network Behavior
+
+This tool makes **only the following outbound connections**:
+
+| Destination | Port | Protocol | Purpose | When |
+|---|---|---|---|---|
+| FusionCompute VRM (host you enter) | 7443 (default) | HTTPS | Login + GET inventory data | Only during a Collect operation |
+| `localhost` (your own machine) | 5000 | HTTP | Web UI | Always while running |
+
+**It does NOT contact:**
+- ❌ Any update server, telemetry endpoint, or analytics service
+- ❌ Any cloud provider (AWS, Azure, GCP, Anthropic, OpenAI, Google, etc.)
+- ❌ Any third-party server other than your FusionCompute VRM
+- ❌ DNS lookups for any external domain
+- ❌ NTP, license servers, or "phone home" services
+
+**You can verify this yourself:**
+- Run with Wireshark / Process Monitor open and observe traffic
+- Run inside an air-gapped network with only the FC VRM reachable — it will work perfectly
+- Search the source code for `requests.`, `urllib`, `socket.connect`, `webbrowser.open` — there are exactly two destinations: `self.base_url` (FC VRM you provided) and `localhost`
+
+### Verifying downloaded files
+
+Every release includes SHA-256 checksums. To verify your download:
+
+**Windows PowerShell:**
+```powershell
+Get-FileHash FCInventoryTool-v1.0.0-windows.zip -Algorithm SHA256
+```
+
+**Linux / macOS:**
+```bash
+sha256sum FCInventoryTool-v1.0.0-windows.zip
+```
+
+Compare the output against the `SHA256SUMS-v1.0.0.txt` file attached to the same GitHub Release. If the hashes match, the file has not been tampered with since release.
+
+### VirusTotal scan
+
+For extra peace of mind, scan the released `.exe` against 70+ antivirus engines at [virustotal.com](https://www.virustotal.com/):
+
+1. Go to <https://www.virustotal.com/gui/home/upload>
+2. Upload `FCInventoryTool.exe` (or the `.zip`)
+3. Wait for the scan to complete
+4. Check the report — a clean PyInstaller-built Python app should show 0 detections from reputable engines
+
+> **Note:** Some heuristic engines occasionally false-positive on PyInstaller bundles because malware authors also use PyInstaller. Cross-check with multiple engines and the source code if in doubt.
+
+### Reproducible build (verify the .exe matches the source)
+
+The official release is built by GitHub Actions. You can reproduce it locally and confirm the binary matches:
+
+```cmd
+git clone https://github.com/sukritphiboon/fc-inventory.git
+cd fc-inventory
+git checkout v1.0.0
+build.bat
+```
+
+The output `dist\FCInventoryTool\FCInventoryTool.exe` should be functionally identical to the released version. (Byte-exact reproducibility is not guaranteed because PyInstaller embeds timestamps and the OS embeds local paths, but the behavior is identical and you have full control over what code is inside.)
 
 ---
 
@@ -305,7 +372,10 @@ This tool is **not affiliated with or endorsed by Huawei Technologies Co., Ltd.*
 
 ---
 
-## Credits
+## Authors and Acknowledgments
+
+See [AUTHORS.md](AUTHORS.md) for the full list of contributors and acknowledgments, including disclosure of AI-assisted development.
 
 - Built with Flask, openpyxl, requests, waitress
 - API field references from Huawei FusionCompute 8.9.0 VRM API documentation
+- Architecture and implementation pair-programmed with Claude (Anthropic) Opus 4.6 — see [AUTHORS.md](AUTHORS.md)
