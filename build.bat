@@ -18,6 +18,8 @@ echo Building FCInventoryTool.exe ...
 pyinstaller --noconfirm --onedir --name FCInventoryTool ^
     --add-data "templates;templates" ^
     --add-data "static;static" ^
+    --add-data "CHANGELOG.md;." ^
+    --add-data "LICENSE;." ^
     --hidden-import waitress ^
     --collect-submodules waitress ^
     app.py

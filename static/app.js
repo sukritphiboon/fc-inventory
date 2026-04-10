@@ -31,6 +31,15 @@ function handleKeyDown(e) {
 window.addEventListener("DOMContentLoaded", function () {
     loadCredentials();
 
+    // Show version in footer
+    fetch("/api/version")
+        .then(r => r.json())
+        .then(d => {
+            const tag = document.getElementById("version-tag");
+            if (tag && d.version) tag.textContent = "v" + d.version;
+        })
+        .catch(() => {});
+
     // Attach Enter key listener to all form inputs
     document.querySelectorAll("#form-section input").forEach(function (input) {
         input.addEventListener("keydown", handleKeyDown);

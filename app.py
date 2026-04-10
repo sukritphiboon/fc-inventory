@@ -167,6 +167,40 @@ def version():
     return jsonify({"version": __version__})
 
 
+@app.route("/changelog")
+def changelog_page():
+    return render_template("changelog.html", version=__version__)
+
+
+def _find_resource(filename):
+    """Locate a bundled resource file (works in dev and PyInstaller frozen)."""
+    if getattr(sys, "frozen", False):
+        candidates = [
+            os.path.join(sys._MEIPASS, filename),
+            os.path.join(_base_dir, filename),
+        ]
+    else:
+        candidates = [os.path.join(_base_dir, filename)]
+    for p in candidates:
+        if os.path.exists(p):
+            return p
+    return None
+
+
+@app.route("/api/changelog")
+def changelog():
+    """Return the CHANGELOG.md content as plain text."""
+    path = _find_resource("CHANGELOG.md")
+    if not path:
+        return "CHANGELOG.md not found.", 404, {"Content-Type": "text/plain; charset=utf-8"}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+        return content, 200, {"Content-Type": "text/plain; charset=utf-8"}
+    except Exception as e:
+        return f"Error reading CHANGELOG: {e}", 500, {"Content-Type": "text/plain; charset=utf-8"}
+
+
 def _get_lan_ip():
     """Best-effort LAN IP detection for the startup banner."""
     try:

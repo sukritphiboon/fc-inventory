@@ -3,8 +3,27 @@
 A web-based inventory collector for Huawei FusionCompute, similar to RVTools for VMware. Connects to the FusionCompute VRM REST API, gathers infrastructure data (VMs, hosts, clusters, datastores, networks), and exports to a multi-sheet Excel workbook.
 
 **Version:** 1.0.0
-**License:** Internal use
+**License:** MIT (see [LICENSE](LICENSE))
 **Tested with:** FusionCompute 8.9.0
+
+---
+
+## Screenshots
+
+### Login screen
+![Login](docs/images/01-login.png)
+
+### Filled in
+![Filled](docs/images/02-login-filled.png)
+
+### Collection in progress
+![Progress](docs/images/03-progress.png)
+
+### Collection complete
+![Complete](docs/images/04-success.png)
+
+### What's new (release notes)
+![Changelog](docs/images/05-changelog.png)
 
 ---
 
@@ -99,6 +118,41 @@ FCInventoryTool.exe
 | **vDatastore** | Datastore capacity, free space, used %, type |
 | **vSwitch** | Distributed virtual switches and port groups |
 
+### Example output
+
+**vInfo** (sample columns from a real run with 86 VMs):
+
+| VM Name | UUID | Power State | Guest OS | CPUs | Memory (MB) | Total Disk (GB) | NICs | IP Addresses | Host | Cluster |
+|---|---|---|---|---|---|---|---|---|---|---|
+| web-server-01 | 564d... | ON | CentOS 7.9 64bit | 4 | 8192 | 100 | 1 | 10.10.100.11 | CNA78 | ManagementCluster |
+| db-master-01 | 564d... | ON | Red Hat 8.6 64bit | 8 | 32768 | 500 | 2 | 10.10.100.21 | CNA126 | ManagementCluster |
+| backup-agent-01 | 564d... | OFF | Ubuntu 22.04 64bit | 2 | 4096 | 50 | 1 |  | CNA64 | ManagementCluster |
+
+**vHost** (sample):
+
+| Host Name | IP Address | Status | Cluster | CPU Model | CPU Cores | Memory Total (MB) | Running VMs | BMC IP |
+|---|---|---|---|---|---|---|---|---|
+| CNA78 | 10.10.10.78 | normal | ManagementCluster | Intel Xeon Gold 6248R | 48 | 524288 | 25 | 10.10.20.78 |
+| CNA126 | 10.10.10.126 | normal | ManagementCluster | Intel Xeon Gold 6338 | 64 | 786432 | 18 | 10.10.20.126 |
+
+**vDatastore** (sample):
+
+| Datastore Name | Storage Type | Capacity (GB) | Free (GB) | Used % | Status |
+|---|---|---|---|---|---|
+| autoDS_CNA78 | LOCALPOME | 1529 | 712 | 53.4 | NORMAL |
+| IPSAN | LUNPOME | 7167 | 2204 | 69.2 | NORMAL |
+
+**vSummary** (counts):
+
+| Item | Count |
+|---|---|
+| Total VMs | 86 |
+| Power ON | 64 |
+| Power OFF | 22 |
+| Total Hosts | 8 |
+| Total Clusters | 3 |
+| Total Datastores | 15 |
+
 ---
 
 ## Network Requirements
@@ -191,19 +245,63 @@ Open `http://localhost:5000` (or your custom port) manually.
 
 ```
 fc-inventory/
-├── app.py              # Flask app + production main entry point
-├── fc_client.py        # FusionCompute REST API client
-├── collector.py        # Orchestrates collection + field mapping
-├── excel_builder.py    # Multi-sheet Excel generator
-├── requirements.txt    # Python dependencies
-├── build.bat           # Build standalone .exe
+├── app.py                # Flask app + production main entry point
+├── fc_client.py          # FusionCompute REST API client
+├── collector.py          # Orchestrates collection + field mapping
+├── excel_builder.py      # Multi-sheet Excel generator
+├── requirements.txt      # Python dependencies
+├── build.bat             # Build standalone .exe
+├── CHANGELOG.md          # Version history
+├── LICENSE               # MIT license
 ├── templates/
-│   └── index.html      # Single-page web UI
+│   ├── index.html        # Main web UI
+│   └── changelog.html    # Release notes page
 ├── static/
-│   ├── style.css       # UI styling
-│   └── app.js          # UI logic, progress polling
-└── README.md           # This file
+│   ├── style.css         # UI styling
+│   └── app.js            # UI logic, progress polling
+├── docs/
+│   ├── images/           # README screenshots
+│   └── take_screenshots.py  # Helper to regenerate screenshots
+└── README.md             # This file
 ```
+
+---
+
+## Versioning and Release Notes
+
+This project follows [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`):
+
+- **MAJOR** — breaking changes (e.g. CLI/API changes that require user action)
+- **MINOR** — new features, backwards-compatible
+- **PATCH** — bug fixes only
+
+See [CHANGELOG.md](CHANGELOG.md) for the full history. Release notes are also viewable in the web UI by clicking **What's new** in the footer.
+
+---
+
+## License
+
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for the full text.
+
+In short:
+- ✅ Free to use, copy, modify, distribute (commercial or private)
+- ✅ Free to integrate into closed-source software
+- ⚠️ Provided "as is" without warranty
+- ⚠️ The original copyright and license notice must be included in copies
+
+### Third-party software
+
+This tool depends on the following open-source libraries (installed via `pip` and bundled in the .exe):
+
+| Library | License | Purpose |
+|---|---|---|
+| [Flask](https://flask.palletsprojects.com/) | BSD-3-Clause | Web framework |
+| [waitress](https://github.com/Pylons/waitress) | ZPL-2.1 | Production WSGI server |
+| [requests](https://requests.readthedocs.io/) | Apache-2.0 | HTTP client |
+| [openpyxl](https://openpyxl.readthedocs.io/) | MIT | Excel generation |
+| [PyInstaller](https://pyinstaller.org/) (build only) | GPL with exception | Standalone .exe builder |
+
+This tool is **not affiliated with or endorsed by Huawei Technologies Co., Ltd.** "FusionCompute" is a trademark of Huawei. The tool consumes Huawei's published REST API for inventory purposes only.
 
 ---
 
