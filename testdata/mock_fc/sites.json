@@ -1,0 +1,9 @@
+{
+  "sites": [
+    {
+      "uri": "/service/sites/1",
+      "name": "Site-A",
+      "id": "1"
+    }
+  ]
+}

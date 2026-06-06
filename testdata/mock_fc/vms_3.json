@@ -1,0 +1,20 @@
+{
+  "urn": "urn:vm:3",
+  "uri": "/service/vms/3",
+  "name": "vm-web-01",
+  "status": "running",
+  "uuid": "aabbccdd-0000-0000-0000-000000000003",
+  "locationUrn": "urn:host:2",
+  "hostUrn": "urn:host:2",
+  "clusterUrn": "urn:cluster:1",
+  "description": "Web server",
+  "createTime": "2024-03-05 09:15:00",
+  "toolsVersion": "12.5.0",
+  "osOptions": {"osType": "Ubuntu 22.04"},
+  "vmConfig": {
+    "cpu": {"quantity": 2, "coresPerSocket": 1},
+    "memory": {"quantityMB": 4096},
+    "nics": [{"name": "nic-0", "mac": "00:50:56:8a:00:03", "ip": "10.1.0.13", "portGroupName": "pg-vmotion"}],
+    "disks": [{"name": "disk-0", "quantityGB": 50, "datastoreUrn": "urn:datastore:2"}]
+  }
+}

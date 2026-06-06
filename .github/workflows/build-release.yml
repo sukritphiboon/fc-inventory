@@ -1,8 +1,11 @@
-name: Build and Release
+name: build-release
 
-# Build the standalone .exe automatically when a version tag is pushed,
-# attach it to the GitHub Release, and publish SHA-256 checksums.
-# This proves the .exe is reproducibly built from the tagged source.
+# Build a static fc-inventory binary for each supported OS/arch on every
+# tag push (v*.*.*). Uploads .zip (Windows) and .tar.gz (Linux/macOS)
+# archives + SHA-256 checksums as workflow artifacts and attaches them
+# to the GitHub Release.
+#
+# Replaces the v1.0.0 Windows-only PyInstaller pipeline.
 
 on:
   push:
@@ -14,78 +17,107 @@ permissions:
   contents: write
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
-
+  test:
+    name: test
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout source at tag
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+      - name: go vet
+        run: go vet ./...
+      - name: go test
+        run: go test ./...
+
+  build:
+    name: build-${{ matrix.goos }}/${{ matrix.goarch }}
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: windows, goarch: amd64, ext: .exe,   archive: zip }
+          - { goos: linux,   goarch: amd64, ext: "",     archive: tar.gz }
+          - { goos: darwin,  goarch: amd64, ext: "",     archive: tar.gz }
+    steps:
+      - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          python-version: "3.13"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller
-
-      - name: Build .exe with PyInstaller
-        run: |
-          pyinstaller --noconfirm --onedir --name FCInventoryTool `
-            --add-data "templates;templates" `
-            --add-data "static;static" `
-            --add-data "CHANGELOG.md;." `
-            --add-data "LICENSE;." `
-            --add-data "README.md;." `
-            --hidden-import waitress `
-            --collect-submodules waitress `
-            app.py
+          go-version: "1.22"
+          cache: true
 
       - name: Get version from tag
         id: version
         shell: bash
-        run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
-      - name: Create release zip
-        shell: pwsh
         run: |
-          $tag = "${{ steps.version.outputs.tag }}"
-          Compress-Archive -Path "dist/FCInventoryTool" -DestinationPath "FCInventoryTool-$tag-windows.zip" -Force
-          Get-FileHash "FCInventoryTool-$tag-windows.zip" -Algorithm SHA256 | Format-List
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=dev" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Compute SHA-256 checksums
-        shell: pwsh
+      - name: Build
+        working-directory: .
         run: |
-          $tag = "${{ steps.version.outputs.tag }}"
-          $zipHash = (Get-FileHash "FCInventoryTool-$tag-windows.zip" -Algorithm SHA256).Hash.ToLower()
-          $exeHash = (Get-FileHash "dist/FCInventoryTool/FCInventoryTool.exe" -Algorithm SHA256).Hash.ToLower()
-          @"
-          FC Inventory Tool $tag - SHA-256 Checksums
-          ===========================================
-          Built by GitHub Actions from commit $env:GITHUB_SHA
+          mkdir -p dist
+          CGO_ENABLED=0 go build \
+            -trimpath \
+            -ldflags="-s -w -X main.version=${{ steps.version.outputs.tag }}" \
+            -o "dist/fc-inventory${{ matrix.ext }}" \
+            ./cmd/fc-inventory
 
-          $zipHash  FCInventoryTool-$tag-windows.zip
-          $exeHash  FCInventoryTool.exe
-          "@ | Out-File -FilePath "SHA256SUMS-$tag.txt" -Encoding ascii
+      - name: Package (zip)
+        if: matrix.archive == 'zip'
+        working-directory: dist
+        run: |
+          mv "fc-inventory${{ matrix.ext }}" "fc-inventory${{ matrix.ext }}.bin"
+          (cd .. && zip -j "dist/fc-inventory-${{ steps.version.outputs.tag }}-${{ matrix.goos }}-${{ matrix.goarch }}.zip" "dist/fc-inventory${{ matrix.ext }}.bin")
+          rm "fc-inventory${{ matrix.ext }}.bin"
+
+      - name: Package (tar.gz)
+        if: matrix.archive == 'tar.gz'
+        working-directory: dist
+        run: |
+          tar -czf "fc-inventory-${{ steps.version.outputs.tag }}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" "fc-inventory${{ matrix.ext }}"
+
+      - name: Generate SHA-256 checksums
+        working-directory: dist
+        run: |
+          ( cd .. && find dist -type f \( -name '*.zip' -o -name '*.tar.gz' \) -print0 | xargs -0 sha256sum > dist/SHA256SUMS.txt )
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: FCInventoryTool-${{ steps.version.outputs.tag }}
+          name: fc-inventory-${{ matrix.goos }}-${{ matrix.goarch }}
           path: |
-            FCInventoryTool-*.zip
-            SHA256SUMS-*.txt
+            dist/*.zip
+            dist/*.tar.gz
+            dist/SHA256SUMS.txt
           retention-days: 90
 
-      - name: Attach artifacts to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+  release:
+    name: publish-release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Attach to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            FCInventoryTool-*.zip
-            SHA256SUMS-*.txt
-          generate_release_notes: false
+            artifacts/**/*.zip
+            artifacts/**/*.tar.gz
+            artifacts/**/SHA256SUMS.txt
+          generate_release_notes: true
           fail_on_unmatched_files: true

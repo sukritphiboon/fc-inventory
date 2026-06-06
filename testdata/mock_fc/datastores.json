@@ -1,0 +1,24 @@
+{
+  "datastores": [
+    {
+      "urn": "urn:datastore:1",
+      "name": "ds-prod-01",
+      "storageType": "FUSION_STORAGE",
+      "capacityGB": 51200,
+      "freeSpaceGB": 32768,
+      "status": "normal",
+      "thinProvisionSupport": true,
+      "description": "Production datastore"
+    },
+    {
+      "urn": "urn:datastore:2",
+      "name": "ds-prod-02",
+      "storageType": "NFS",
+      "capacityGB": 10240,
+      "freeSpaceGB": 5120,
+      "status": "normal",
+      "thinProvisionSupport": false,
+      "description": "NFS datastore"
+    }
+  ]
+}

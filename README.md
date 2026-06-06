@@ -1,381 +1,191 @@
-# FC Inventory Tool
+# fc-inventory
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Release](https://img.shields.io/github/v/release/sukritphiboon/fc-inventory)](https://github.com/sukritphiboon/fc-inventory/releases)
-[![Build](https://github.com/sukritphiboon/fc-inventory/actions/workflows/build-release.yml/badge.svg)](https://github.com/sukritphiboon/fc-inventory/actions/workflows/build-release.yml)
-[![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
+> A one-shot CLI service for collecting inventory from Huawei FusionCompute VRM and exporting a RVTools-style multi-sheet Excel workbook.
 
-A web-based inventory collector for Huawei FusionCompute, similar to RVTools for VMware. Connects to the FusionCompute VRM REST API, gathers infrastructure data (VMs, hosts, clusters, datastores, networks), and exports to a multi-sheet Excel workbook.
+[![Go 1.22+](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev/) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**Version:** 1.0.0
-**License:** MIT (see [LICENSE](LICENSE))
-**Tested with:** FusionCompute 8.9.0
-
----
-
-## Screenshots
-
-### Login screen
-![Login](docs/images/01-login.png)
-
-### Filled in
-![Filled](docs/images/02-login-filled.png)
-
-### Collection in progress
-![Progress](docs/images/03-progress.png)
-
-### Collection complete
-![Complete](docs/images/04-success.png)
-
-### What's new (release notes)
-![Changelog](docs/images/05-changelog.png)
-
----
+`fc-inventory` connects to a Huawei FusionCompute VRM REST API, fetches sites / clusters / hosts / VMs / datastores / networks, and writes a 10-sheet `.xlsx` workbook modelled on RVTools for VMware. The v2.0.0 release is a clean Go rewrite: a single statically-linked binary with no Python runtime, no web server, and no browser UI. All parameters come from a YAML config file; the service runs once and exits.
 
 ## Features
 
-- **One-click web UI** — open in browser, enter credentials, click Collect
-- **10 Excel sheets** matching RVTools conventions:
-  `vSummary`, `vInfo`, `vCPU`, `vMemory`, `vDisk`, `vNetwork`, `vHost`, `vCluster`, `vDatastore`, `vSwitch`
-- **Power state per VM** (ON/OFF) on every relevant sheet
-- **VM UUID** included for asset tracking
-- **Hybrid field mapping** — works across multiple FusionCompute versions by trying multiple field name candidates
-- **Auto-detect login** — tries multiple API versions and auth methods
-- **Live progress bar** with cancel support
-- **Remembers last credentials** (host/port/username) in browser localStorage; password is never saved
-- **Standalone .exe** — no Python install required on target machines
-- **Rotating log file** for troubleshooting
-- **Production WSGI server** (waitress) — not the Flask dev server
+- **One-shot CLI service** — `fc-inventory collect` reads the YAML config, performs a single inventory pull, writes the workbook, and exits. Schedule it from cron / Task Scheduler / Kubernetes CronJob.
+- **YAML config with `${ENV}` interpolation** — keep secrets out of the config file. `${FC_PASSWORD}` is resolved from the environment at startup; a missing variable fails fast.
+- **Auto-detect login** — the same 6-API-version × 3-auth-method × 3-port matrix that the original v1.0.0 Python tool used.
+- **Hybrid field mapping** — each Excel column maps to a list of candidate JSON paths; the first non-empty value wins, so the output stays stable across FusionCompute versions. Extra raw keys are also captured for forward compatibility.
+- **Version-tolerant** — TLS verify is disabled by default because FC ships with self-signed certs (configurable per-host).
+- **Cross-platform** — single static binary; releases for `windows/amd64`, `linux/amd64`, `darwin/amd64`.
 
----
+## Output sheets (RVTools convention)
 
-## Quick Start (End Users)
+`vSummary`, `vInfo`, `vCPU`, `vMemory`, `vDisk`, `vNetwork`, `vHost`, `vCluster`, `vDatastore`, `vSwitch`. Each sheet has bold white-on-`#2C3E50` headers, an autofilter, and a frozen top row.
 
-### Option A: Standalone .exe (recommended)
+## Quick start
 
-1. Download/copy the `FCInventoryTool` folder to your machine
-2. Double-click `FCInventoryTool.exe`
-3. Browser opens automatically at `http://localhost:5000`
-4. Enter your FusionCompute VRM details:
-   - **Host / IP**: e.g., `192.168.1.100` (no `https://` needed)
-   - **Port**: `7443` (default for VRM REST API)
-   - **Username** / **Password**
-5. Click **Collect Inventory** and wait for the progress bar
-6. Click **Download Excel** when complete
+### 1. Download a release
 
-The Excel file is also saved next to `FCInventoryTool.exe` for safekeeping.
+Grab the binary for your platform from the [Releases](https://github.com/sukritphiboon/fc-inventory/releases) page. Linux/macOS example:
 
-### Option B: Run from source (developers)
+```bash
+curl -LO https://github.com/sukritphiboon/fc-inventory/releases/latest/download/fc-inventory-linux-amd64.tar.gz
+tar -xzf fc-inventory-linux-amd64.tar.gz
+chmod +x fc-inventory
+```
+
+### 2. Create a config file
+
+```bash
+curl -LO https://raw.githubusercontent.com/sukritphiboon/fc-inventory/main/examples/fc-inventory.yaml
+```
+
+Edit `fc-inventory.yaml` to point at your VRM, then export the password:
+
+```bash
+export FC_PASSWORD='YourFusionComputePassword'
+```
+
+### 3. Run
+
+```bash
+./fc-inventory --config ./fc-inventory.yaml
+```
+
+You will see progress lines on stderr:
+
+```
+[  5%] Logging in to FusionCompute...
+[ 10%] Fetching sites...
+[ 15%] Fetching clusters...
+...
+[100%] Collection complete!
+Excel saved: ./out/FC_Inventory_20260606_120000.xlsx
+```
+
+The workbook is saved next to the binary in `./out/`. Open it in Excel or LibreOffice.
+
+## Command-line reference
+
+```
+fc-inventory collect
+  --config       string   default: ./fc-inventory.yaml
+  --log-level    string   debug|info|warn|error  (overrides config)
+  --dry-run      bool     parse config + show plan, no network
+  --output       string   override output.directory
+  --filename     string   override output.filename_prefix
+
+fc-inventory version [--short]
+fc-inventory mock-server [--port 17443]   # local mock FC API for testing
+```
+
+`fc-inventory` with no subcommand defaults to `collect`.
+
+### Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| 0 | success |
+| 1 | collection / API / network error |
+| 2 | config / validation error (e.g. missing `${ENV}`) |
+| 130 | cancelled (Ctrl+C) |
+
+## Configuration reference
+
+See [`examples/fc-inventory.yaml`](examples/fc-inventory.yaml) for the full annotated schema. Key fields:
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `fc.host` | — (required) | VRM host or IP; `https://` prefix auto-stripped |
+| `fc.port` | 7443 | primary port; auto-detect also tries 7443 and 8443 |
+| `fc.username` | — (required) | FusionCompute username |
+| `fc.password` | — (required) | password; supports `${ENV}` interpolation |
+| `fc.insecure_tls` | `true` | disable TLS verify (FC uses self-signed certs) |
+| `collection.page_size` | 100 | offset/limit page size for paginated GETs |
+| `collection.request_timeout_seconds` | 60 | per-request HTTP timeout |
+| `output.directory` | `.` | output directory (created if missing) |
+| `output.filename_prefix` | `FC_Inventory` | prefix of the produced `.xlsx` |
+| `output.overwrite` | `true` | remove the previous run's `.xlsx` before writing |
+| `logging.level` | `info` | `debug` \| `info` \| `warn` \| `error` |
+| `logging.file` | `fc_inventory.log` | rotating log file path |
+
+## Scheduling
+
+The service is a one-shot CLI; run it on a schedule.
+
+### Linux / macOS cron
+
+```cron
+# Every 6 hours, write to a date-stamped directory
+0 */6 * * * cd /opt/fc-inventory && FC_PASSWORD="$(cat .fc_password)" ./fc-inventory --config fc-inventory.yaml
+```
+
+### Windows Task Scheduler
+
+Create a Basic Task → Trigger: Daily, Recur every 1 day, Repeat task every 6 hours. Action: `fc-inventory.exe --config "C:\fc-inventory\fc-inventory.yaml"`. Set the password in a `.env` script that's sourced before the binary runs, or use a system environment variable.
+
+## Security model
+
+- **TLS verify disabled by default** because FusionCompute ships with self-signed certificates. If your deployment uses a CA-signed cert, set `fc.insecure_tls: false`.
+- **Password is never logged.** The YAML loader expands `${ENV}` into the in-memory config struct; a custom redacting `LogValuer` strips it before any debug log line. Use `${FC_PASSWORD}` and keep the secret out of the YAML file.
+- **No telemetry.** The only outbound network call is to the FusionCompute VRM you configure. The binary makes zero other connections.
+- **No web server.** The v1.0.0 Flask layer is gone. There is no HTTP listener inside the service binary. You can point it at a remote VRM over the public internet; nobody else can connect to the collector.
+
+## Building from source
 
 ```bash
 git clone https://github.com/sukritphiboon/fc-inventory.git
 cd fc-inventory
-pip install -r requirements.txt
-python app.py
+go build -o fc-inventory ./cmd/fc-inventory
 ```
 
-Then open <http://localhost:5000>
-
----
-
-## Building the .exe
-
-Requires Python 3.9+ and PyInstaller.
+Cross-compile:
 
 ```bash
-build.bat
+GOOS=windows GOARCH=amd64 go build -o fc-inventory.exe ./cmd/fc-inventory
+GOOS=linux   GOARCH=amd64 go build -o fc-inventory     ./cmd/fc-inventory
+GOOS=darwin  GOARCH=amd64 go build -o fc-inventory-darwin ./cmd/fc-inventory
 ```
 
-Output goes to `dist\FCInventoryTool\`. Distribute the entire folder (~80 MB).
+Run the unit tests:
 
----
-
-## Configuration
-
-Environment variables (optional):
-
-| Variable | Default | Description |
-|---|---|---|
-| `FC_INVENTORY_BIND` | `127.0.0.1` | Bind address. Set to `0.0.0.0` to expose on LAN (see Security below) |
-| `FC_INVENTORY_PORT` | `5000` | Local web UI port |
-
-Example:
-```cmd
-set FC_INVENTORY_BIND=0.0.0.0
-set FC_INVENTORY_PORT=8080
-FCInventoryTool.exe
-```
-
----
-
-## Excel Sheet Reference
-
-| Sheet | Description |
-|---|---|
-| **vSummary** | Total counts (VMs, hosts, clusters) and Power ON/OFF breakdown per cluster |
-| **vInfo** | VM overview: name, UUID, power state, OS, CPU, memory, disk, IPs, host, cluster |
-| **vCPU** | VM CPU details: cores, sockets, reservation, limit, weight, hot-plug |
-| **vMemory** | VM memory details: size, reservation, limit, hot-plug, hugepages |
-| **vDisk** | One row per disk: capacity, bus type, thin provision, datastore |
-| **vNetwork** | One row per NIC: MAC, IP, port group, VLAN, NIC type |
-| **vHost** | Physical host info: CPU model/cores/MHz, memory, BMC IP, status |
-| **vCluster** | Cluster config: HA, DRS, host count |
-| **vDatastore** | Datastore capacity, free space, used %, type |
-| **vSwitch** | Distributed virtual switches and port groups |
-
-### Example output
-
-**vInfo** (sample columns from a real run with 86 VMs):
-
-| VM Name | UUID | Power State | Guest OS | CPUs | Memory (MB) | Total Disk (GB) | NICs | IP Addresses | Host | Cluster |
-|---|---|---|---|---|---|---|---|---|---|---|
-| web-server-01 | 564d... | ON | CentOS 7.9 64bit | 4 | 8192 | 100 | 1 | 10.10.100.11 | CNA78 | ManagementCluster |
-| db-master-01 | 564d... | ON | Red Hat 8.6 64bit | 8 | 32768 | 500 | 2 | 10.10.100.21 | CNA126 | ManagementCluster |
-| backup-agent-01 | 564d... | OFF | Ubuntu 22.04 64bit | 2 | 4096 | 50 | 1 |  | CNA64 | ManagementCluster |
-
-**vHost** (sample):
-
-| Host Name | IP Address | Status | Cluster | CPU Model | CPU Cores | Memory Total (MB) | Running VMs | BMC IP |
-|---|---|---|---|---|---|---|---|---|
-| CNA78 | 10.10.10.78 | normal | ManagementCluster | Intel Xeon Gold 6248R | 48 | 524288 | 25 | 10.10.20.78 |
-| CNA126 | 10.10.10.126 | normal | ManagementCluster | Intel Xeon Gold 6338 | 64 | 786432 | 18 | 10.10.20.126 |
-
-**vDatastore** (sample):
-
-| Datastore Name | Storage Type | Capacity (GB) | Free (GB) | Used % | Status |
-|---|---|---|---|---|---|
-| autoDS_CNA78 | LOCALPOME | 1529 | 712 | 53.4 | NORMAL |
-| IPSAN | LUNPOME | 7167 | 2204 | 69.2 | NORMAL |
-
-**vSummary** (counts):
-
-| Item | Count |
-|---|---|
-| Total VMs | 86 |
-| Power ON | 64 |
-| Power OFF | 22 |
-| Total Hosts | 8 |
-| Total Clusters | 3 |
-| Total Datastores | 15 |
-
----
-
-## Network Requirements
-
-- The machine running FC Inventory Tool must reach **TCP 7443** on the FusionCompute VRM
-- The browser only needs to reach the local machine (default `127.0.0.1:5000`)
-- Self-signed TLS certificates on the VRM are accepted (verification disabled — see Security below)
-
----
-
-## Security Considerations
-
-This tool is intended for **internal/trusted environments only**. Please review the following before deploying:
-
-### Built-in protections
-- **Local-only by default** — the web UI binds to `127.0.0.1`. Other machines on your network cannot reach it unless you explicitly set `FC_INVENTORY_BIND=0.0.0.0`
-- **Password is never persisted** — only host/username/port are remembered (browser localStorage)
-- **Password is never logged** — credentials are never written to `fc_inventory.log`
-- **No authentication on the web UI** — because access is limited to localhost
-- **Production WSGI** — uses `waitress`, not Flask's debug server
-- **Token-based session** to FusionCompute — token is held in memory only, logout on completion
-
-### Known limitations / things to know
-- **TLS certificate verification is disabled** when calling the FusionCompute API. Most FC deployments use self-signed certificates, so verification would fail for legitimate hosts. This is the same behavior as `curl -k` or RVTools' SSL setting. Acceptable for trusted internal networks.
-- **Single-user, single-job** at a time — there is no multi-user session management
-- **No CSRF tokens** on the API endpoints — relies on local-only binding
-- **No rate limiting** — not needed because access is single-user, local-only
-- **The .exe is unsigned** — Windows SmartScreen may show a warning the first time you run it. Click "More info" → "Run anyway". To avoid this in production, the binary should be code-signed with an organization certificate.
-
-### Recommended deployment hardening
-If you need to expose this on a network:
-1. **Do NOT** set `FC_INVENTORY_BIND=0.0.0.0` without putting it behind a reverse proxy (nginx, Caddy) that adds:
-   - HTTPS with a real certificate
-   - HTTP basic auth or SSO
-   - IP allowlist
-2. Run as a non-admin Windows user
-3. Place the executable in a write-protected directory (Excel output and log file need a writable location — pass a custom path via env var if needed)
-4. Use a dedicated read-only FusionCompute account for inventory collection (only needs view/query permissions, not write)
-5. Code-sign the executable with your organization's certificate to remove SmartScreen warnings
-6. Run an antivirus scan on the .exe before distributing internally
-
-### Why this tool is not malicious
-- **Source code is fully open** in this repository — every line is auditable
-- **No outbound network calls** except to the FusionCompute VRM you specify (see Network Behavior below)
-- **No telemetry, analytics, or auto-update** — runs entirely offline (apart from FC API calls)
-- **No persistence** — does not install services, scheduled tasks, registry entries, or background processes
-- **Reproducible build** — run `build.bat` against the same git commit to verify the binary
-- **Built by GitHub Actions** — the official .exe attached to each release is built by `.github/workflows/build-release.yml` running on GitHub's infrastructure, not on a developer machine. The build log is publicly auditable
-
-### Network Behavior
-
-This tool makes **only the following outbound connections**:
-
-| Destination | Port | Protocol | Purpose | When |
-|---|---|---|---|---|
-| FusionCompute VRM (host you enter) | 7443 (default) | HTTPS | Login + GET inventory data | Only during a Collect operation |
-| `localhost` (your own machine) | 5000 | HTTP | Web UI | Always while running |
-
-**It does NOT contact:**
-- ❌ Any update server, telemetry endpoint, or analytics service
-- ❌ Any cloud provider (AWS, Azure, GCP, Anthropic, OpenAI, Google, etc.)
-- ❌ Any third-party server other than your FusionCompute VRM
-- ❌ DNS lookups for any external domain
-- ❌ NTP, license servers, or "phone home" services
-
-**You can verify this yourself:**
-- Run with Wireshark / Process Monitor open and observe traffic
-- Run inside an air-gapped network with only the FC VRM reachable — it will work perfectly
-- Search the source code for `requests.`, `urllib`, `socket.connect`, `webbrowser.open` — there are exactly two destinations: `self.base_url` (FC VRM you provided) and `localhost`
-
-### Verifying downloaded files
-
-Every release includes SHA-256 checksums. To verify your download:
-
-**Windows PowerShell:**
-```powershell
-Get-FileHash FCInventoryTool-v1.0.0-windows.zip -Algorithm SHA256
-```
-
-**Linux / macOS:**
 ```bash
-sha256sum FCInventoryTool-v1.0.0-windows.zip
+go test ./...
 ```
 
-Compare the output against the `SHA256SUMS-v1.0.0.txt` file attached to the same GitHub Release. If the hashes match, the file has not been tampered with since release.
-
-### VirusTotal scan
-
-For extra peace of mind, scan the released `.exe` against 70+ antivirus engines at [virustotal.com](https://www.virustotal.com/):
-
-1. Go to <https://www.virustotal.com/gui/home/upload>
-2. Upload `FCInventoryTool.exe` (or the `.zip`)
-3. Wait for the scan to complete
-4. Check the report — a clean PyInstaller-built Python app should show 0 detections from reputable engines
-
-> **Note:** Some heuristic engines occasionally false-positive on PyInstaller bundles because malware authors also use PyInstaller. Cross-check with multiple engines and the source code if in doubt.
-
-### Reproducible build (verify the .exe matches the source)
-
-The official release is built by GitHub Actions. You can reproduce it locally and confirm the binary matches:
-
-```cmd
-git clone https://github.com/sukritphiboon/fc-inventory.git
-cd fc-inventory
-git checkout v1.0.0
-build.bat
-```
-
-The output `dist\FCInventoryTool\FCInventoryTool.exe` should be functionally identical to the released version. (Byte-exact reproducibility is not guaranteed because PyInstaller embeds timestamps and the OS embeds local paths, but the behavior is identical and you have full control over what code is inside.)
-
----
-
-## Troubleshooting
-
-### Login fails with HTTP 401
-- Verify the username/password works on the FusionCompute web console
-- Check the log file `fc_inventory.log` — it tries multiple login methods and logs each attempt
-- Confirm port 7443 is reachable: `Test-NetConnection <vrm_ip> -Port 7443`
-
-### Excel has missing columns
-- Check `fc_inventory.log` for `=== SAMPLE ... keys:` lines — these show the actual API field names returned by your FusionCompute version
-- File a bug report with those log lines so the field mapping can be extended
-
-### "No space left on device"
-- Output is saved next to the .exe. Make sure there's at least 50 MB free in that location.
-
-### Port 5000 already in use
-```cmd
-set FC_INVENTORY_PORT=5050
-FCInventoryTool.exe
-```
-
-### Browser doesn't open automatically
-Open `http://localhost:5000` (or your custom port) manually.
-
----
-
-## Logs
-
-- **Location**: `fc_inventory.log` next to the .exe (or working directory if running from source)
-- **Rotation**: 5 MB max per file, 3 backups kept
-- **Level**: INFO (DEBUG details available by editing `app.py`)
-- **What is logged**: API request paths, HTTP status codes, response sizes, sample field keys, errors. **Passwords are never logged.**
-
----
-
-## Repository
-
-<https://github.com/sukritphiboon/fc-inventory>
-
-## Files
+## Project layout
 
 ```
 fc-inventory/
-├── app.py                # Flask app + production main entry point
-├── fc_client.py          # FusionCompute REST API client
-├── collector.py          # Orchestrates collection + field mapping
-├── excel_builder.py      # Multi-sheet Excel generator
-├── requirements.txt      # Python dependencies
-├── build.bat             # Build standalone .exe
-├── CHANGELOG.md          # Version history
-├── LICENSE               # MIT license
-├── templates/
-│   ├── index.html        # Main web UI
-│   └── changelog.html    # Release notes page
-├── static/
-│   ├── style.css         # UI styling
-│   └── app.js            # UI logic, progress polling
-├── docs/
-│   ├── images/           # README screenshots
-│   └── take_screenshots.py  # Helper to regenerate screenshots
-└── README.md             # This file
+├── cmd/fc-inventory/main.go        # Cobra CLI; entry point
+├── internal/
+│   ├── config/        # YAML loader, env-var interpolation
+│   ├── logging/       # slog + lumberjack rotating file
+│   ├── fieldmap/      # hybrid field-mapping tables + path helpers
+│   ├── fcclient/      # FC REST adapter (auto-detect login, pagination, resources)
+│   ├── collector/     # orchestrator: login -> fetch -> flatten -> sheet data
+│   └── excel/         # openpyxl-equivalent .xlsx writer (excelize)
+├── testdata/mock_fc/               # canned JSON for offline E2E
+├── examples/fc-inventory.yaml      # annotated sample config
+└── .github/workflows/build-release.yml  # cross-compile release pipeline
 ```
 
----
+## Comparison with v1.0.0 (Python + Flask)
 
-## Versioning and Release Notes
-
-This project follows [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`):
-
-- **MAJOR** — breaking changes (e.g. CLI/API changes that require user action)
-- **MINOR** — new features, backwards-compatible
-- **PATCH** — bug fixes only
-
-See [CHANGELOG.md](CHANGELOG.md) for the full history. Release notes are also viewable in the web UI by clicking **What's new** in the footer.
-
----
+| Concern | v1.0.0 (Python) | v2.0.0 (Go) |
+| --- | --- | --- |
+| Runtime | Python 3.9+, Flask, waitress, requests, openpyxl | None — static Go binary |
+| User surface | Web UI on `127.0.0.1:5000` | CLI (YAML config) |
+| Distribution | PyInstaller `.exe` (one-dir, ~80 MB) | single ~10 MB binary per OS |
+| Excel writer | `openpyxl` | `excelize` |
+| TLS verify | disabled (self-signed certs) | disabled by default, opt-in to enable |
+| Config | per-request JSON body + `localStorage` | YAML file with `${ENV}` interpolation |
+| Cancellation | `cancelled` flag + `threading.Event` | `context.Context` + `signal.NotifyContext` |
+| Auto-detect login | 6 versions × 3 auths × 3 ports | identical matrix |
+| Hybrid field map | 8 `OrderedDict`s in `collector.py` | 8 `map[string][]string` in `fieldmap/mapping.go` |
+| Sheet count | 10 (RVTools convention) | 10 (RVTools convention) |
 
 ## License
 
-This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for the full text.
+MIT — see [LICENSE](LICENSE).
 
-In short:
-- ✅ Free to use, copy, modify, distribute (commercial or private)
-- ✅ Free to integrate into closed-source software
-- ⚠️ Provided "as is" without warranty
-- ⚠️ The original copyright and license notice must be included in copies
+## Authors
 
-### Third-party software
-
-This tool depends on the following open-source libraries (installed via `pip` and bundled in the .exe):
-
-| Library | License | Purpose |
-|---|---|---|
-| [Flask](https://flask.palletsprojects.com/) | BSD-3-Clause | Web framework |
-| [waitress](https://github.com/Pylons/waitress) | ZPL-2.1 | Production WSGI server |
-| [requests](https://requests.readthedocs.io/) | Apache-2.0 | HTTP client |
-| [openpyxl](https://openpyxl.readthedocs.io/) | MIT | Excel generation |
-| [PyInstaller](https://pyinstaller.org/) (build only) | GPL with exception | Standalone .exe builder |
-
-This tool is **not affiliated with or endorsed by Huawei Technologies Co., Ltd.** "FusionCompute" is a trademark of Huawei. The tool consumes Huawei's published REST API for inventory purposes only.
-
----
-
-## Authors and Acknowledgments
-
-See [AUTHORS.md](AUTHORS.md) for the full list of contributors and acknowledgments, including disclosure of AI-assisted development.
-
-- Built with Flask, openpyxl, requests, waitress
-- API field references from Huawei FusionCompute 8.9.0 VRM API documentation
-- Architecture and implementation pair-programmed with Claude (Anthropic) Opus 4.6 — see [AUTHORS.md](AUTHORS.md)
+See [AUTHORS.md](AUTHORS.md). v2.0.0 is a Go port of the v1.0.0 Python tool by Sukrit Phiboon, with AI pair-programming assistance from Claude.

@@ -1,8 +1,24 @@
-__pycache__/
-*.pyc
-dist/
-build/
-*.spec
+# Go build artefacts
+/fc-inventory
+/fc-inventory.exe
+/dist/
+/build/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local config overrides (do not commit secrets)
+/fc-inventory.local.yaml
+/config.local.yaml
+*.local.yaml
+
+# Testdata outputs
 *.xlsx
 *.log
+out/
+
+# Agent / dev tooling
 .claude/

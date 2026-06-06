@@ -1,0 +1,37 @@
+{
+  "hosts": [
+    {
+      "urn": "urn:host:1",
+      "uri": "/service/hosts/1",
+      "name": "host-01.example.com",
+      "ip": "10.0.0.11",
+      "status": "running",
+      "cpuModel": "Intel Xeon Gold 6248R",
+      "cpuQuantity": 48,
+      "cpuMHz": 3000,
+      "memoryQuantityMB": 262144,
+      "runningVmCount": 3,
+      "clusterUrn": "urn:cluster:1",
+      "bmcIp": "10.0.0.10",
+      "isMaintaining": false,
+      "hypervisor": "KVM"
+    },
+    {
+      "urn": "urn:host:2",
+      "uri": "/service/hosts/2",
+      "name": "host-02.example.com",
+      "ip": "10.0.0.12",
+      "status": "running",
+      "cpuModel": "Intel Xeon Gold 6248R",
+      "cpuQuantity": 48,
+      "cpuMHz": 3000,
+      "memoryQuantityMB": 262144,
+      "runningVmCount": 1,
+      "clusterUrn": "urn:cluster:1",
+      "bmcIp": "10.0.0.13",
+      "isMaintaining": false,
+      "hypervisor": "KVM"
+    }
+  ]
+}
+

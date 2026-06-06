@@ -1,0 +1,65 @@
+# fc-inventory sample configuration.
+# All string fields support ${ENV_VAR} interpolation; missing env vars
+# cause the service to fail fast at startup. The password is never
+# written to logs (see the logging package's redacting LogValuer).
+
+# ── FusionCompute target ─────────────────────────────────────────
+fc:
+  # VRM host or IP. The "https://" prefix is auto-stripped.
+  host: "10.0.0.10"
+  # Primary port. The auto-detect login also tries 7443 and 8443.
+  port: 7443
+  username: "readonly"
+  # Pull the password from the environment to keep secrets out of the
+  # config file. export FC_PASSWORD='MyP@ssw0rd' before running.
+  password: "${FC_PASSWORD}"
+  # REQUIRED for self-signed FusionCompute certificates. The TLS
+  # verification is disabled to match the v1.0.0 Python behaviour.
+  # Do NOT flip this to false in production deployments that use a
+  # real CA-signed cert.
+  insecure_tls: true
+
+# ── Collection behaviour ──────────────────────────────────────────
+collection:
+  # Page size for offset/limit paginated GETs.
+  page_size: 100
+  # Per-request HTTP timeout (seconds). The login loop uses a 10s
+  # inner timeout regardless of this value.
+  request_timeout_seconds: 60
+  # Per-resource timeout (seconds). Used as a soft bound on long
+  # pagination loops.
+  per_resource_timeout_seconds: 30
+  # Append extra raw keys to the Excel rows for any field not in the
+  # hard-coded hybrid mapping. Recommended on for forward-compat with
+  # new FC versions.
+  include_extra_fields: true
+  # Dry-run mode: parse the config and print a plan, no network calls.
+  # Equivalent to the CLI --dry-run flag.
+  dry_run: false
+
+# ── Output ───────────────────────────────────────────────────────
+output:
+  # Output directory (created if missing). The produced file is
+  # {prefix}_{YYYYMMDD_HHMMSS}.xlsx. The first .xlsx in this directory
+  # matching the prefix is removed before a new run when overwrite=true.
+  directory: "./out"
+  filename_prefix: "FC_Inventory"
+  overwrite: true
+
+# ── Logging ──────────────────────────────────────────────────────
+logging:
+  # debug | info | warn | error
+  level: "info"
+  file: "fc_inventory.log"
+  # Rotating log: 5 MB x 3 backups, 30 days, gzip-compressed.
+  max_size_mb: 5
+  max_backups: 3
+  max_age_days: 30
+  compress: true
+
+# ── HTTP client transport ────────────────────────────────────────
+http:
+  disable_keep_alives: false
+  max_idle_conns: 50
+  idle_conn_timeout_seconds: 90
+  tls_min_version: "TLS12"  # TLS10 | TLS11 | TLS12 | TLS13
