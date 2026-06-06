@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sukritphiboon/fc-inventory/internal/config"
+	"github.com/kimzhong/fc-inventory/internal/config"
 )
 
 func newTestConfig(t *testing.T) *config.Config {

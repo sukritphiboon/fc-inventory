@@ -16,7 +16,7 @@ import (
 
 	"github.com/xuri/excelize/v2"
 
-	"github.com/sukritphiboon/fc-inventory/internal/collector"
+	"github.com/kimzhong/fc-inventory/internal/collector"
 )
 
 // SheetOrder mirrors SHEET_ORDER in excel_builder.py:17-20.

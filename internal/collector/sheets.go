@@ -3,7 +3,7 @@ package collector
 import (
 	"fmt"
 
-	"github.com/sukritphiboon/fc-inventory/internal/fieldmap"
+	"github.com/kimzhong/fc-inventory/internal/fieldmap"
 )
 
 // buildVSummary produces the vSummary sheet: counts + per-cluster power

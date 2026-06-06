@@ -13,7 +13,7 @@ import (
 
 	"gopkg.in/natefinch/lumberjack.v2"
 
-	"github.com/sukritphiboon/fc-inventory/internal/config"
+	"github.com/kimzhong/fc-inventory/internal/config"
 )
 
 // Setup builds a *slog.Logger that writes to both stderr and the rotating

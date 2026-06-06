@@ -13,8 +13,8 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/sukritphiboon/fc-inventory/internal/config"
-	"github.com/sukritphiboon/fc-inventory/internal/fcclient"
+	"github.com/kimzhong/fc-inventory/internal/config"
+	"github.com/kimzhong/fc-inventory/internal/fcclient"
 )
 
 // Sheets is the per-sheet data the collector hands to the Excel builder.

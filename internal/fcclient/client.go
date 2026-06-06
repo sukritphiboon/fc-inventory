@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sukritphiboon/fc-inventory/internal/config"
+	"github.com/kimzhong/fc-inventory/internal/config"
 )
 
 // Client is the FusionCompute REST adapter. It is safe for concurrent

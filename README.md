@@ -23,10 +23,10 @@
 
 ### 1. Download a release
 
-Grab the binary for your platform from the [Releases](https://github.com/sukritphiboon/fc-inventory/releases) page. Linux/macOS example:
+Grab the binary for your platform from the [Releases](https://github.com/kimzhong/fc-inventory/releases) page. Linux/macOS example:
 
 ```bash
-curl -LO https://github.com/sukritphiboon/fc-inventory/releases/latest/download/fc-inventory-linux-amd64.tar.gz
+curl -LO https://github.com/kimzhong/fc-inventory/releases/latest/download/fc-inventory-linux-amd64.tar.gz
 tar -xzf fc-inventory-linux-amd64.tar.gz
 chmod +x fc-inventory
 ```
@@ -34,7 +34,7 @@ chmod +x fc-inventory
 ### 2. Create a config file
 
 ```bash
-curl -LO https://raw.githubusercontent.com/sukritphiboon/fc-inventory/main/examples/fc-inventory.yaml
+curl -LO https://raw.githubusercontent.com/kimzhong/fc-inventory/main/examples/fc-inventory.yaml
 ```
 
 Edit `fc-inventory.yaml` to point at your VRM, then export the password:
@@ -131,7 +131,7 @@ Create a Basic Task → Trigger: Daily, Recur every 1 day, Repeat task every 6 h
 ## Building from source
 
 ```bash
-git clone https://github.com/sukritphiboon/fc-inventory.git
+git clone https://github.com/kimzhong/fc-inventory.git
 cd fc-inventory
 go build -o fc-inventory ./cmd/fc-inventory
 ```

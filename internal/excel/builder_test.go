@@ -7,7 +7,7 @@ import (
 
 	"github.com/xuri/excelize/v2"
 
-	"github.com/sukritphiboon/fc-inventory/internal/collector"
+	"github.com/kimzhong/fc-inventory/internal/collector"
 )
 
 func TestBuild_RoundTrip(t *testing.T) {

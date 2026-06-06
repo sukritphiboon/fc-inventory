@@ -36,11 +36,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sukritphiboon/fc-inventory/internal/collector"
-	"github.com/sukritphiboon/fc-inventory/internal/config"
-	"github.com/sukritphiboon/fc-inventory/internal/excel"
-	"github.com/sukritphiboon/fc-inventory/internal/fcclient"
-	"github.com/sukritphiboon/fc-inventory/internal/logging"
+	"github.com/kimzhong/fc-inventory/internal/collector"
+	"github.com/kimzhong/fc-inventory/internal/config"
+	"github.com/kimzhong/fc-inventory/internal/excel"
+	"github.com/kimzhong/fc-inventory/internal/fcclient"
+	"github.com/kimzhong/fc-inventory/internal/logging"
 )
 
 // version is set at build time via -ldflags "-X main.version=...".
