@@ -90,11 +90,6 @@ jobs:
         run: |
           tar -czf "fc-inventory-${{ steps.version.outputs.tag }}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" "fc-inventory${{ matrix.ext }}"
 
-      - name: Generate SHA-256 checksums
-        working-directory: dist
-        run: |
-          ( cd .. && find dist -type f \( -name '*.zip' -o -name '*.tar.gz' \) -print0 | xargs -0 sha256sum > dist/SHA256SUMS.txt )
-
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -102,7 +97,6 @@ jobs:
           path: |
             dist/*.zip
             dist/*.tar.gz
-            dist/SHA256SUMS.txt
           retention-days: 90
 
   release:
@@ -116,12 +110,26 @@ jobs:
         with:
           path: artifacts
 
+      - name: Generate aggregated SHA-256 checksums
+        working-directory: artifacts
+        # Walk every zip / tar.gz in the downloaded artifact tree and
+        # emit "<sha>  <filename>" lines using the basename so users can
+        # verify against the release's display filename (e.g.
+        # `sha256sum -c SHA256SUMS.txt` after `curl -L ... -o <name>`).
+        run: |
+          ( find . -type f \( -name '*.zip' -o -name '*.tar.gz' \) -print0 \
+            | xargs -0 -I{} sha256sum {} \
+            | sed 's| \./| |; s|/dist/|/|' \
+            | sort -k2 \
+          ) > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
       - name: Attach to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             artifacts/**/*.zip
             artifacts/**/*.tar.gz
-            artifacts/**/SHA256SUMS.txt
+            artifacts/SHA256SUMS.txt
           generate_release_notes: true
           fail_on_unmatched_files: true

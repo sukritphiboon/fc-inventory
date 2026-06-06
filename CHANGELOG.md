@@ -4,6 +4,26 @@ All notable changes to `fc-inventory` are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.0.1] - 2026-06-06
+
+### Fixed
+
+- **Cross-compile matrix was ignoring `GOOS`/`GOARCH`.** The
+  `.github/workflows/build-release.yml` build step did not export the
+  matrix values to `go build`, so all three jobs (windows/amd64,
+  linux/amd64, darwin/amd64) compiled for the runner's native OS
+  (Linux). The Windows zip that landed in the v2.0.0 release
+  therefore contained a Linux ELF renamed to `fc-inventory.exe.bin`
+  and could not be run on Windows. The v2.0.0 release has been
+  removed; v2.0.1 publishes the correct cross-compiled binaries.
+- **`SHA256SUMS.txt` was per-platform and got clobbered.** Each matrix
+  job wrote its own `SHA256SUMS.txt` with the same filename, so the
+  release step uploaded a file containing only the last job's checksums
+  (windows in v2.0.0). v2.0.1 generates a single multi-platform
+  `SHA256SUMS.txt` in the release job, listing all three archives with
+  their release-page filenames so users can `sha256sum -c
+  SHA256SUMS.txt` directly.
+
 ## [2.0.0] - 2026-06-06
 
 ### Changed — breaking
