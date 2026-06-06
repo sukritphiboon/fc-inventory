@@ -66,11 +66,15 @@ jobs:
         working-directory: .
         run: |
           mkdir -p dist
-          CGO_ENABLED=0 go build \
-            -trimpath \
-            -ldflags="-s -w -X main.version=${{ steps.version.outputs.tag }}" \
-            -o "dist/fc-inventory${{ matrix.ext }}" \
-            ./cmd/fc-inventory
+          # GOOS/GOARCH must be set for the cross-compile matrix to
+          # actually produce the target's binary. Without this, every
+          # job compiles for the runner's native OS (linux/amd64).
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} CGO_ENABLED=0 \
+            go build \
+              -trimpath \
+              -ldflags="-s -w -X main.version=${{ steps.version.outputs.tag }}" \
+              -o "dist/fc-inventory${{ matrix.ext }}" \
+              ./cmd/fc-inventory
 
       - name: Package (zip)
         if: matrix.archive == 'zip'
