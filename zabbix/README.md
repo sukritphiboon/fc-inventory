@@ -20,8 +20,11 @@ Virtualization/
   — the Zabbix 7.0 template export (Script items + LLD + triggers).
 - **`Virtualization/Huawei_FusionCompute/7.0/README.md`** — user-facing setup,
   macros, metrics and triggers (required by upstream).
+- **[`INSTALL_AND_TEST.md`](INSTALL_AND_TEST.md)** — step-by-step install & test
+  guide (spin up Zabbix 7.0, import, link to a VRM, verify, re-export).
 - **[`CONTRIBUTING_TO_ZABBIX.md`](CONTRIBUTING_TO_ZABBIX.md)** — how to validate
   the template and submit it to the official Zabbix community-templates repo.
+- **[`test/`](test/)** — offline test harness (no Zabbix/VRM required).
 
 Quick local sanity check (structure only):
 
