@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-06-12
+
+### Added
+- **Headless CLI mode**: `FCInventoryTool.exe collect --host <ip> --username <user> [--port 7443] [--out file.xlsx]`
+  runs a single collection and writes the Excel file without opening the web UI.
+  Ideal for scheduled snapshots via Windows Task Scheduler. Password is supplied
+  via `--password`, the `FC_INVENTORY_PASSWORD` environment variable, or an
+  interactive prompt (never echoed into command-line history when using env/prompt).
+- **Update notifications**: the web UI checks GitHub for a newer release and shows
+  a non-intrusive "Version X is available" link in the footer. Still no
+  auto-update and no telemetry — it only reads the public releases API and can be
+  turned off entirely with `FC_INVENTORY_DISABLE_UPDATE_CHECK`.
+- `/api/update-check` endpoint backing the notice (degrades silently when offline).
+- `web` and `collect` subcommands plus `--version` on the executable.
+- Test suite (`pytest`) covering version comparison, collector field mapping, and
+  the Excel builder; runs in CI on every push and pull request, and gates releases.
+- `requirements-dev.txt` for the developer/test toolchain.
+
+### Changed
+- The release workflow now runs the test suite before building, and supports
+  **optional Authenticode code signing** through Azure Trusted Signing. Signing is
+  off by default and activates only when `AZURE_SIGNING_ENABLED` and the related
+  secrets are configured, so the build keeps working without it. Published SHA-256
+  checksums now cover the signed binary.
+
 ## [1.0.0] - 2026-04-10
 
 First production-ready release.

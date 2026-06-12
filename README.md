@@ -65,6 +65,31 @@ A web-based inventory collector for Huawei FusionCompute, similar to RVTools for
 
 The Excel file is also saved next to `FCInventoryTool.exe` for safekeeping.
 
+### Option C: Headless / command-line mode (automation)
+
+Run a one-off collection without the web UI — useful for scheduled snapshots
+(e.g. Windows Task Scheduler):
+
+```cmd
+FCInventoryTool.exe collect --host 192.168.1.100 --username admin --port 7443 --out C:\reports\fc.xlsx
+```
+
+The password is read from (in order): the `--password` flag, the
+`FC_INVENTORY_PASSWORD` environment variable, or an interactive prompt. Prefer
+the environment variable so the password never lands in command history or the
+Task Scheduler argument list:
+
+```cmd
+set FC_INVENTORY_PASSWORD=yourpassword
+FCInventoryTool.exe collect --host 192.168.1.100 --username admin
+```
+
+If `--out` is omitted the file is written to `FC_Inventory_<timestamp>.xlsx` in
+the current directory. The full output path is printed on success, and the
+process exits non-zero on failure so it plays nicely with scripts.
+
+Running `FCInventoryTool.exe` with no arguments (or `web`) launches the UI as before.
+
 ### Option B: Run from source (developers)
 
 ```bash
@@ -88,6 +113,33 @@ build.bat
 
 Output goes to `dist\FCInventoryTool\`. Distribute the entire folder (~80 MB).
 
+### Running the tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest -q
+```
+
+The suite runs automatically in CI on every push and pull request, and gates
+the release build.
+
+### Code signing (optional)
+
+The official release workflow can Authenticode-sign `FCInventoryTool.exe` via
+[Azure Trusted Signing](https://learn.microsoft.com/azure/trusted-signing/),
+which removes the Windows SmartScreen "unknown publisher" warning on first run.
+Signing is **off by default** and stays off until configured, so forks and
+local builds keep working unchanged.
+
+To enable it on your fork, set the repository **variable**
+`AZURE_SIGNING_ENABLED` to `true` and provide:
+
+- Secrets: `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`
+- Variables: `AZURE_SIGNING_ENDPOINT`, `AZURE_SIGNING_ACCOUNT`, `AZURE_SIGNING_PROFILE`
+
+Signing happens before the zip and checksums are produced, so the published
+SHA-256 values cover the signed binary.
+
 ---
 
 ## Configuration
@@ -98,6 +150,8 @@ Environment variables (optional):
 |---|---|---|
 | `FC_INVENTORY_BIND` | `127.0.0.1` | Bind address. Set to `0.0.0.0` to expose on LAN (see Security below) |
 | `FC_INVENTORY_PORT` | `5000` | Local web UI port |
+| `FC_INVENTORY_PASSWORD` | _(unset)_ | Password for headless `collect` mode (avoids putting it on the command line) |
+| `FC_INVENTORY_DISABLE_UPDATE_CHECK` | _(unset)_ | Set to any value to disable the "new version available" check in the web UI |
 
 Example:
 ```cmd

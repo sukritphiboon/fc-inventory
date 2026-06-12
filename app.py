@@ -6,6 +6,8 @@ Web-based FusionCompute inventory collector with Excel export.
 import os
 import sys
 import socket
+import argparse
+import getpass
 import logging
 import logging.handlers
 import threading
@@ -16,8 +18,9 @@ from flask import Flask, render_template, request, jsonify, send_file
 
 from collector import InventoryCollector
 from excel_builder import build_excel
+from version_utils import GITHUB_REPO, get_latest_release, is_newer
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 # Configure logging - console + file
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s - %(message)s"
@@ -167,6 +170,33 @@ def version():
     return jsonify({"version": __version__})
 
 
+@app.route("/api/update-check")
+def update_check():
+    """
+    Check GitHub for a newer release. Returns whether an update is available
+    so the web UI can show a non-intrusive notice. Never auto-updates, never
+    sends any data about the user. Disable with FC_INVENTORY_DISABLE_UPDATE_CHECK.
+    """
+    if os.environ.get("FC_INVENTORY_DISABLE_UPDATE_CHECK"):
+        return jsonify({"enabled": False, "current": __version__})
+
+    try:
+        latest = get_latest_release(GITHUB_REPO)
+        tag = latest["tag"]
+        available = bool(tag) and is_newer(tag, __version__)
+        return jsonify({
+            "enabled": True,
+            "current": __version__,
+            "latest": tag.lstrip("vV"),
+            "update_available": available,
+            "url": latest["url"],
+        })
+    except Exception as e:
+        # Offline / rate-limited / no releases yet: degrade silently.
+        logging.info(f"Update check skipped: {e}")
+        return jsonify({"enabled": True, "current": __version__, "error": str(e)})
+
+
 @app.route("/changelog")
 def changelog_page():
     return render_template("changelog.html", version=__version__)
@@ -234,11 +264,12 @@ def _print_banner(host, port):
     print(banner, flush=True)
 
 
-def main():
+def run_web(bind=None, port=None):
+    """Launch the local web UI (default mode)."""
     # Bind to localhost by default for security.
     # Set FC_INVENTORY_BIND=0.0.0.0 to expose on the LAN (use with caution).
-    host = os.environ.get("FC_INVENTORY_BIND", "127.0.0.1")
-    port = int(os.environ.get("FC_INVENTORY_PORT", "5000"))
+    host = bind or os.environ.get("FC_INVENTORY_BIND", "127.0.0.1")
+    port = port or int(os.environ.get("FC_INVENTORY_PORT", "5000"))
 
     _print_banner(host, port)
 
@@ -257,6 +288,109 @@ def main():
     except ImportError:
         logging.warning("waitress not installed, using Flask dev server")
         app.run(host=host, port=port, debug=False, use_reloader=False)
+
+
+def run_headless(args):
+    """
+    Run a single collection without the web UI and write an Excel file, then
+    exit. Intended for automation (e.g. Windows Task Scheduler). Returns a
+    process exit code.
+    """
+    password = args.password or os.environ.get("FC_INVENTORY_PASSWORD")
+    if not password:
+        try:
+            password = getpass.getpass("FusionCompute password: ")
+        except Exception:
+            password = ""
+    if not password:
+        print(
+            "ERROR: password required. Pass --password, set the "
+            "FC_INVENTORY_PASSWORD environment variable, or run interactively.",
+            file=sys.stderr,
+        )
+        return 2
+
+    collector = InventoryCollector(args.host, args.username, password, port=args.port)
+    logging.info(
+        f"Headless collection from {args.host}:{args.port} as {args.username}"
+    )
+
+    try:
+        data = collector.collect_all()
+    except KeyboardInterrupt:
+        logging.warning("Interrupted by user")
+        return 130
+    except Exception as e:
+        logging.error(f"Collection failed: {e}")
+        return 1
+
+    out = args.out
+    if not out:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        out = os.path.join(os.getcwd(), f"FC_Inventory_{timestamp}.xlsx")
+    out = os.path.abspath(out)
+
+    out_dir = os.path.dirname(out)
+    if out_dir and not os.path.isdir(out_dir):
+        os.makedirs(out_dir, exist_ok=True)
+
+    build_excel(data, out)
+    logging.info(f"Excel saved to: {out}")
+    # Print the path on its own line so scripts can capture it.
+    print(out)
+    return 0
+
+
+def _build_arg_parser():
+    parser = argparse.ArgumentParser(
+        prog="FCInventoryTool",
+        description="FusionCompute inventory collector (RVTools-style).",
+    )
+    parser.add_argument(
+        "--version", action="version",
+        version=f"FC Inventory Tool {__version__}",
+    )
+    sub = parser.add_subparsers(dest="command")
+
+    web_p = sub.add_parser("web", help="Launch the web UI (this is the default).")
+    web_p.add_argument(
+        "--host", default=None,
+        help="Bind address for the web UI (overrides FC_INVENTORY_BIND).",
+    )
+    web_p.add_argument(
+        "--port", type=int, default=None,
+        help="Web UI port (overrides FC_INVENTORY_PORT, default 5000).",
+    )
+
+    col_p = sub.add_parser(
+        "collect", help="Run one headless collection to an .xlsx file and exit.",
+    )
+    col_p.add_argument("--host", required=True, help="FusionCompute VRM host or IP.")
+    col_p.add_argument("--username", required=True, help="Login username.")
+    col_p.add_argument(
+        "--password", default=None,
+        help="Login password. Omit to use FC_INVENTORY_PASSWORD or be prompted.",
+    )
+    col_p.add_argument(
+        "--port", type=int, default=7443,
+        help="FusionCompute API port (default 7443).",
+    )
+    col_p.add_argument(
+        "--out", default=None,
+        help="Output .xlsx path (default: ./FC_Inventory_<timestamp>.xlsx).",
+    )
+    return parser
+
+
+def main():
+    parser = _build_arg_parser()
+    args = parser.parse_args()
+
+    if args.command == "collect":
+        sys.exit(run_headless(args))
+
+    # Default (no subcommand) or explicit "web": launch the UI.
+    run_web(getattr(args, "host", None), getattr(args, "port", None))
 
 
 if __name__ == "__main__":

@@ -14,7 +14,27 @@ permissions:
   contents: write
 
 jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: pytest -q
+
   build-windows:
+    needs: tests
     runs-on: windows-latest
 
     steps:
@@ -43,6 +63,26 @@ jobs:
             --hidden-import waitress `
             --collect-submodules waitress `
             app.py
+
+      # Optional Authenticode signing via Azure Trusted Signing.
+      # No-ops until the repo variable AZURE_SIGNING_ENABLED is set to "true"
+      # and the corresponding secrets/variables are configured. Signing here
+      # (before zipping/hashing) ensures the published checksums cover the
+      # signed binary, and removes the Windows SmartScreen warning on first run.
+      - name: Sign .exe (Azure Trusted Signing)
+        if: vars.AZURE_SIGNING_ENABLED == 'true'
+        uses: azure/trusted-signing-action@v0.5.9
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          trusted-signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_SIGNING_PROFILE }}
+          files-folder: ${{ github.workspace }}\dist\FCInventoryTool
+          files-folder-filter: exe
+          files-folder-recurse: true
+          file-digest: SHA256
 
       - name: Get version from tag
         id: version
