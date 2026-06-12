@@ -301,3 +301,22 @@ footer p {
     color: #bdc3c7;
     font-size: 12px;
 }
+
+.update-notice {
+    margin-top: 6px;
+}
+
+.update-notice a {
+    display: inline-block;
+    color: #27ae60;
+    font-weight: 600;
+    text-decoration: none;
+    padding: 4px 10px;
+    border: 1px solid #27ae60;
+    border-radius: 4px;
+}
+
+.update-notice a:hover {
+    background: #27ae60;
+    color: #fff;
+}

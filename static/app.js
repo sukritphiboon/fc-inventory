@@ -40,6 +40,9 @@ window.addEventListener("DOMContentLoaded", function () {
         })
         .catch(() => {});
 
+    // Non-intrusive "new version available" notice (no auto-update)
+    checkForUpdate();
+
     // Attach Enter key listener to all form inputs
     document.querySelectorAll("#form-section input").forEach(function (input) {
         input.addEventListener("keydown", handleKeyDown);
@@ -52,6 +55,22 @@ window.addEventListener("DOMContentLoaded", function () {
         document.getElementById("host").focus();
     }
 });
+
+// ── Update notification ─────────────────────────────────
+function checkForUpdate() {
+    fetch("/api/update-check")
+        .then(r => r.json())
+        .then(d => {
+            if (!d || !d.update_available || !d.latest) return;
+            const notice = document.getElementById("update-notice");
+            const link = document.getElementById("update-link");
+            if (!notice || !link) return;
+            link.textContent = "⬆ Version " + d.latest + " is available — download";
+            if (d.url) link.href = d.url;
+            notice.style.display = "block";
+        })
+        .catch(() => {});
+}
 
 // ── Real Collection ─────────────────────────────────────
 function startCollection() {

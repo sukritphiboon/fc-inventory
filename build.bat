@@ -20,6 +20,7 @@ pyinstaller --noconfirm --onedir --name FCInventoryTool ^
     --add-data "static;static" ^
     --add-data "CHANGELOG.md;." ^
     --add-data "LICENSE;." ^
+    --add-data "README.md;." ^
     --hidden-import waitress ^
     --collect-submodules waitress ^
     app.py
