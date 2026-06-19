@@ -297,6 +297,34 @@ def test_get_all_stops_on_empty_batch(monkeypatch):
     assert c._get_all("/p", "clusters") == []
 
 
+def test_get_all_handles_top_level_list(monkeypatch):
+    c = _make_client()
+    monkeypatch.setattr(c, "_get", lambda path, params=None: [{"id": 1}, {"id": 2}])
+    assert c._get_all("/p", "clusters") == [{"id": 1}, {"id": 2}]
+
+
+# ── _extract_list helper ────────────────────────────────────
+
+
+def test_extract_list_from_dict_key_order():
+    assert FCClient._extract_list({"a": [1], "b": [2]}, "a", "b") == [1]
+    assert FCClient._extract_list({"b": [2]}, "a", "b") == [2]
+
+
+def test_extract_list_from_bare_list():
+    assert FCClient._extract_list([{"x": 1}], "a") == [{"x": 1}]
+
+
+def test_extract_list_empty_value_is_returned():
+    # Key present with an empty list should win over later candidates.
+    assert FCClient._extract_list({"a": [], "b": [9]}, "a", "b") == []
+
+
+def test_extract_list_fallbacks_to_empty():
+    assert FCClient._extract_list({"nope": 1}, "a", "b") == []
+    assert FCClient._extract_list(None, "a") == []
+
+
 # ── Getters with fallback keys ──────────────────────────────
 
 
@@ -346,6 +374,42 @@ def test_get_portgroups_key_fallback(monkeypatch):
     c = _make_client()
     monkeypatch.setattr(c, "_get", lambda path: {"portGroups": [{"name": "pg1"}]})
     assert c.get_portgroups("/dvs/1") == [{"name": "pg1"}]
+
+
+def test_get_portgroups_list_fallback(monkeypatch):
+    c = _make_client()
+    monkeypatch.setattr(c, "_get", lambda path: [{"name": "pg1"}])
+    assert c.get_portgroups("/dvs/1") == [{"name": "pg1"}]
+
+
+def test_get_dvswitches_list_fallback(monkeypatch):
+    c = _make_client()
+    monkeypatch.setattr(c, "_get", lambda path: [{"name": "dvs1"}])
+    assert c.get_dvswitches("/site") == [{"name": "dvs1"}]
+
+
+def test_get_sites_list_fallback(monkeypatch):
+    c = _make_client()
+    monkeypatch.setattr(c, "_get", lambda path, params=None: [{"uri": "/s1"}])
+    assert c.get_sites() == [{"uri": "/s1"}]
+
+
+def test_get_vm_nics_list_fallback(monkeypatch):
+    c = _make_client()
+    monkeypatch.setattr(c, "_get", lambda path: [{"mac": "aa"}])
+    assert c.get_vm_nics("/vm/1") == [{"mac": "aa"}]
+
+
+def test_get_vm_disks_list_fallback(monkeypatch):
+    c = _make_client()
+    monkeypatch.setattr(c, "_get", lambda path: [{"id": "v1"}])
+    assert c.get_vm_disks("/vm/1") == [{"id": "v1"}]
+
+
+def test_get_site_portgroups_list_fallback(monkeypatch):
+    c = _make_client()
+    monkeypatch.setattr(c, "_get", lambda path: [{"name": "pg1"}])
+    assert c.get_site_portgroups("/site") == [{"name": "pg1"}]
 
 
 def test_get_site_portgroups_swallows_errors(monkeypatch):

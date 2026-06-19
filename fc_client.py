@@ -206,6 +206,24 @@ class FCClient:
         resp.raise_for_status()
         return resp.json()
 
+    @staticmethod
+    def _extract_list(data, *keys):
+        """Extract a list from an API response that may be a dict or bare list.
+
+        FusionCompute responses vary by version: some endpoints return a
+        wrapper dict ({"vms": [...]}), others a top-level list. Tries each
+        candidate key in order on a dict, falls back to the response itself
+        when it is already a list, and always returns a list.
+        """
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            for key in keys:
+                value = data.get(key)
+                if value is not None:
+                    return value
+        return []
+
     def _get_all(self, path, result_key):
         """Fetch all pages of a paginated list endpoint."""
         items = []
@@ -213,14 +231,14 @@ class FCClient:
         limit = 100
         while True:
             data = self._get(path, params={"offset": offset, "limit": limit})
-            # Try expected key, fallback to common alternatives
+            # If top-level is a list, use it directly (no pagination metadata).
+            if isinstance(data, list):
+                return data
+            # Try expected key, fallback to common alternatives.
             batch = data.get(result_key)
             if batch is None:
                 batch = data.get("items", data.get("result", []))
             if not batch:
-                # If top-level is a list, use it directly
-                if isinstance(data, list):
-                    return data
                 break
             items.extend(batch)
             total = data.get("total", len(items))
@@ -234,7 +252,7 @@ class FCClient:
     def get_sites(self):
         """Get all sites."""
         data = self._get("/sites")
-        return data.get("sites", [])
+        return self._extract_list(data, "sites")
 
     # ── Cluster ──────────────────────────────────────────
 
@@ -270,18 +288,18 @@ class FCClient:
     def get_vm_nics(self, vm_uri):
         """Get network interfaces of a VM."""
         data = self._get(f"{vm_uri}/nics")
-        return data.get("nics", data.get("items", []))
+        return self._extract_list(data, "nics", "items")
 
     def get_vm_disks(self, vm_uri):
         """Get disk volumes of a VM."""
         # Try /volumes first, fallback to /disks
         try:
             data = self._get(f"{vm_uri}/volumes")
-            return data.get("volumes", data.get("items", []))
+            return self._extract_list(data, "volumes", "items")
         except Exception:
             try:
                 data = self._get(f"{vm_uri}/disks")
-                return data.get("disks", data.get("items", []))
+                return self._extract_list(data, "disks", "items")
             except Exception:
                 return []
 
@@ -297,18 +315,14 @@ class FCClient:
         """Get all distributed virtual switches."""
         data = self._get(f"{site_uri}/dvswitchs")
         logger.debug(f"DVSwitch response keys: {list(data.keys()) if isinstance(data, dict) else 'not a dict'}")
-        result = data.get("dvswitchs", data.get("dvSwitchs", data.get("items", [])))
-        if not result and isinstance(data, list):
-            result = data
+        result = self._extract_list(data, "dvswitchs", "dvSwitchs", "items")
         logger.info(f"Found {len(result)} DVSwitches")
         return result
 
     def get_portgroups(self, dvswitch_uri):
         """Get port groups of a DVSwitch. dvswitch_uri = full URI from dvswitch list."""
         data = self._get(f"{dvswitch_uri}/portgroups")
-        result = data.get("portgroups", data.get("portGroups", data.get("items", [])))
-        if not result and isinstance(data, list):
-            result = data
+        result = self._extract_list(data, "portgroups", "portGroups", "items")
         logger.info(f"Found {len(result)} port groups under {dvswitch_uri}")
         return result
 
@@ -316,9 +330,7 @@ class FCClient:
         """Get all port groups in a site (fallback when DVSwitch listing is empty)."""
         try:
             data = self._get(f"{site_uri}/portgroups")
-            result = data.get("portgroups", data.get("portGroups", data.get("items", [])))
-            if not result and isinstance(data, list):
-                result = data
+            result = self._extract_list(data, "portgroups", "portGroups", "items")
             logger.info(f"Found {len(result)} port groups at site level")
             return result
         except Exception as e:
