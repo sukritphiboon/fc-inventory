@@ -5,19 +5,36 @@ Handles authentication and all inventory data retrieval.
 
 import hashlib
 import logging
+import os
 import requests
 import urllib3
 
 logger = logging.getLogger(__name__)
 
-# Suppress SSL warnings for self-signed certificates
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+def _resolve_verify(verify):
+    """Decide the requests TLS-verify setting.
+
+    Precedence: explicit argument > FC_INVENTORY_CA_BUNDLE (path to a CA file)
+    > FC_INVENTORY_VERIFY_SSL (truthy enables verification) > default False.
+
+    FusionCompute VRM commonly uses self-signed certs, so verification is OFF
+    by default for backward compatibility, but operators can opt in to a
+    proper trust chain to defend against man-in-the-middle attacks.
+    """
+    if verify is not None:
+        return verify
+    ca_bundle = os.environ.get("FC_INVENTORY_CA_BUNDLE")
+    if ca_bundle:
+        return ca_bundle
+    flag = os.environ.get("FC_INVENTORY_VERIFY_SSL", "").strip().lower()
+    return flag in ("1", "true", "yes", "on")
 
 
 class FCClient:
     """Client for FusionCompute VRM REST API."""
 
-    def __init__(self, host, username, password, port=7443):
+    def __init__(self, host, username, password, port=7443, verify=None):
         # Strip protocol prefix if user entered it (e.g. https://10.0.0.1)
         host = host.replace("https://", "").replace("http://", "").strip("/")
         self.host = host
@@ -26,7 +43,10 @@ class FCClient:
         self.password = password
         self.base_url = f"https://{host}:{port}"
         self.session = requests.Session()
-        self.session.verify = False
+        self.session.verify = _resolve_verify(verify)
+        # Only suppress the insecure-request warning when verification is off.
+        if not self.session.verify:
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         self.session.headers.update({
             "Content-Type": "application/json; charset=UTF-8",
             "Accept": "application/json;version=v1.0;charset=UTF-8",

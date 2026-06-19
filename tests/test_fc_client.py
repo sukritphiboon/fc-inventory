@@ -7,7 +7,7 @@ All network I/O is faked: each test installs a lightweight stand-in for the
 import requests
 import pytest
 
-from fc_client import FCClient
+from fc_client import FCClient, _resolve_verify
 
 
 # ── Fakes ────────────────────────────────────────────────────
@@ -90,6 +90,34 @@ def test_sha256_is_hex_digest():
     digest = c._sha256("secret")
     assert len(digest) == 64
     assert all(ch in "0123456789abcdef" for ch in digest)
+
+
+# ── TLS verification config ─────────────────────────────────
+
+
+def test_verify_defaults_to_false(monkeypatch):
+    monkeypatch.delenv("FC_INVENTORY_VERIFY_SSL", raising=False)
+    monkeypatch.delenv("FC_INVENTORY_CA_BUNDLE", raising=False)
+    c = FCClient("10.0.0.1", "u", "p")
+    assert c.session.verify is False
+
+
+def test_verify_explicit_argument_wins():
+    c = FCClient("10.0.0.1", "u", "p", verify=True)
+    assert c.session.verify is True
+
+
+def test_resolve_verify_env_flag(monkeypatch):
+    monkeypatch.delenv("FC_INVENTORY_CA_BUNDLE", raising=False)
+    monkeypatch.setenv("FC_INVENTORY_VERIFY_SSL", "true")
+    assert _resolve_verify(None) is True
+    monkeypatch.setenv("FC_INVENTORY_VERIFY_SSL", "0")
+    assert _resolve_verify(None) is False
+
+
+def test_resolve_verify_ca_bundle_path(monkeypatch):
+    monkeypatch.setenv("FC_INVENTORY_CA_BUNDLE", "/etc/ssl/fc-ca.pem")
+    assert _resolve_verify(None) == "/etc/ssl/fc-ca.pem"
 
 
 # ── login() ─────────────────────────────────────────────────
