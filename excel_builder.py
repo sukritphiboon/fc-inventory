@@ -19,6 +19,23 @@ SHEET_ORDER = [
     "vHost", "vCluster", "vDatastore", "vSwitch",
 ]
 
+# Leading characters that spreadsheet apps may interpret as a formula.
+# Inventory values come from FusionCompute (a VM name/description could be
+# attacker-controlled), so neutralize them to prevent CSV/Excel injection.
+_FORMULA_TRIGGERS = ("=", "+", "-", "@")
+
+
+def _sanitize_cell(value):
+    """Defang spreadsheet-formula injection in string cell values.
+
+    A string beginning with '=', '+', '-' or '@' is prefixed with a single
+    quote so Excel/Sheets render it as literal text instead of evaluating it.
+    Non-string values are returned unchanged.
+    """
+    if isinstance(value, str) and value[:1] in _FORMULA_TRIGGERS:
+        return "'" + value
+    return value
+
 
 def build_excel(data, output_path):
     """
@@ -52,9 +69,9 @@ def build_excel(data, output_path):
                     headers.append(key)
         ws.append(headers)
 
-        # Write data rows
+        # Write data rows (sanitized against formula injection)
         for row in rows:
-            ws.append([row.get(h, "") for h in headers])
+            ws.append([_sanitize_cell(row.get(h, "")) for h in headers])
 
         # Apply header styling
         _style_header(ws)

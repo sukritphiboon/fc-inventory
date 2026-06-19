@@ -152,6 +152,8 @@ Environment variables (optional):
 | `FC_INVENTORY_PORT` | `5000` | Local web UI port |
 | `FC_INVENTORY_PASSWORD` | _(unset)_ | Password for headless `collect` mode (avoids putting it on the command line) |
 | `FC_INVENTORY_DISABLE_UPDATE_CHECK` | _(unset)_ | Set to any value to disable the "new version available" check in the web UI |
+| `FC_INVENTORY_VERIFY_SSL` | _(unset)_ | Set to `1`/`true` to verify the VRM's TLS certificate (off by default for self-signed certs) |
+| `FC_INVENTORY_CA_BUNDLE` | _(unset)_ | Path to a CA bundle/cert used to verify the VRM (enables verification against your own trust chain) |
 
 Example:
 ```cmd

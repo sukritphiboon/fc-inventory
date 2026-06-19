@@ -5,19 +5,36 @@ Handles authentication and all inventory data retrieval.
 
 import hashlib
 import logging
+import os
 import requests
 import urllib3
 
 logger = logging.getLogger(__name__)
 
-# Suppress SSL warnings for self-signed certificates
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+def _resolve_verify(verify):
+    """Decide the requests TLS-verify setting.
+
+    Precedence: explicit argument > FC_INVENTORY_CA_BUNDLE (path to a CA file)
+    > FC_INVENTORY_VERIFY_SSL (truthy enables verification) > default False.
+
+    FusionCompute VRM commonly uses self-signed certs, so verification is OFF
+    by default for backward compatibility, but operators can opt in to a
+    proper trust chain to defend against man-in-the-middle attacks.
+    """
+    if verify is not None:
+        return verify
+    ca_bundle = os.environ.get("FC_INVENTORY_CA_BUNDLE")
+    if ca_bundle:
+        return ca_bundle
+    flag = os.environ.get("FC_INVENTORY_VERIFY_SSL", "").strip().lower()
+    return flag in ("1", "true", "yes", "on")
 
 
 class FCClient:
     """Client for FusionCompute VRM REST API."""
 
-    def __init__(self, host, username, password, port=7443):
+    def __init__(self, host, username, password, port=7443, verify=None):
         # Strip protocol prefix if user entered it (e.g. https://10.0.0.1)
         host = host.replace("https://", "").replace("http://", "").strip("/")
         self.host = host
@@ -26,7 +43,10 @@ class FCClient:
         self.password = password
         self.base_url = f"https://{host}:{port}"
         self.session = requests.Session()
-        self.session.verify = False
+        self.session.verify = _resolve_verify(verify)
+        # Only suppress the insecure-request warning when verification is off.
+        if not self.session.verify:
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         self.session.headers.update({
             "Content-Type": "application/json; charset=UTF-8",
             "Accept": "application/json;version=v1.0;charset=UTF-8",
@@ -111,16 +131,20 @@ class FCClient:
                             )
 
                         logger.debug(f"  -> HTTP {resp.status_code}")
-                        try:
-                            logger.debug(f"  -> Body: {resp.text[:300]}")
-                        except Exception:
-                            pass
 
                         if resp.status_code == 200:
                             self.port = port
                             self.base_url = f"https://{self.host}:{port}/service"
                             logger.info(f"Login OK! version={ver}, base_url={self.base_url}")
                             return self._extract_token(resp, label)
+
+                        # Log the body only on failure: a successful login
+                        # response carries the session token, which must not
+                        # be written to the log file.
+                        try:
+                            logger.debug(f"  -> Body: {resp.text[:300]}")
+                        except Exception:
+                            pass
 
                         body = resp.text[:200]
                         logger.warning(f"  -> Failed ({resp.status_code}): {body}")
@@ -206,6 +230,24 @@ class FCClient:
         resp.raise_for_status()
         return resp.json()
 
+    @staticmethod
+    def _extract_list(data, *keys):
+        """Extract a list from an API response that may be a dict or bare list.
+
+        FusionCompute responses vary by version: some endpoints return a
+        wrapper dict ({"vms": [...]}), others a top-level list. Tries each
+        candidate key in order on a dict, falls back to the response itself
+        when it is already a list, and always returns a list.
+        """
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            for key in keys:
+                value = data.get(key)
+                if value is not None:
+                    return value
+        return []
+
     def _get_all(self, path, result_key):
         """Fetch all pages of a paginated list endpoint."""
         items = []
@@ -213,14 +255,14 @@ class FCClient:
         limit = 100
         while True:
             data = self._get(path, params={"offset": offset, "limit": limit})
-            # Try expected key, fallback to common alternatives
+            # If top-level is a list, use it directly (no pagination metadata).
+            if isinstance(data, list):
+                return data
+            # Try expected key, fallback to common alternatives.
             batch = data.get(result_key)
             if batch is None:
                 batch = data.get("items", data.get("result", []))
             if not batch:
-                # If top-level is a list, use it directly
-                if isinstance(data, list):
-                    return data
                 break
             items.extend(batch)
             total = data.get("total", len(items))
@@ -234,7 +276,7 @@ class FCClient:
     def get_sites(self):
         """Get all sites."""
         data = self._get("/sites")
-        return data.get("sites", [])
+        return self._extract_list(data, "sites")
 
     # ── Cluster ──────────────────────────────────────────
 
@@ -270,18 +312,18 @@ class FCClient:
     def get_vm_nics(self, vm_uri):
         """Get network interfaces of a VM."""
         data = self._get(f"{vm_uri}/nics")
-        return data.get("nics", data.get("items", []))
+        return self._extract_list(data, "nics", "items")
 
     def get_vm_disks(self, vm_uri):
         """Get disk volumes of a VM."""
         # Try /volumes first, fallback to /disks
         try:
             data = self._get(f"{vm_uri}/volumes")
-            return data.get("volumes", data.get("items", []))
+            return self._extract_list(data, "volumes", "items")
         except Exception:
             try:
                 data = self._get(f"{vm_uri}/disks")
-                return data.get("disks", data.get("items", []))
+                return self._extract_list(data, "disks", "items")
             except Exception:
                 return []
 
@@ -297,18 +339,14 @@ class FCClient:
         """Get all distributed virtual switches."""
         data = self._get(f"{site_uri}/dvswitchs")
         logger.debug(f"DVSwitch response keys: {list(data.keys()) if isinstance(data, dict) else 'not a dict'}")
-        result = data.get("dvswitchs", data.get("dvSwitchs", data.get("items", [])))
-        if not result and isinstance(data, list):
-            result = data
+        result = self._extract_list(data, "dvswitchs", "dvSwitchs", "items")
         logger.info(f"Found {len(result)} DVSwitches")
         return result
 
     def get_portgroups(self, dvswitch_uri):
         """Get port groups of a DVSwitch. dvswitch_uri = full URI from dvswitch list."""
         data = self._get(f"{dvswitch_uri}/portgroups")
-        result = data.get("portgroups", data.get("portGroups", data.get("items", [])))
-        if not result and isinstance(data, list):
-            result = data
+        result = self._extract_list(data, "portgroups", "portGroups", "items")
         logger.info(f"Found {len(result)} port groups under {dvswitch_uri}")
         return result
 
@@ -316,9 +354,7 @@ class FCClient:
         """Get all port groups in a site (fallback when DVSwitch listing is empty)."""
         try:
             data = self._get(f"{site_uri}/portgroups")
-            result = data.get("portgroups", data.get("portGroups", data.get("items", [])))
-            if not result and isinstance(data, list):
-                result = data
+            result = self._extract_list(data, "portgroups", "portGroups", "items")
             logger.info(f"Found {len(result)} port groups at site level")
             return result
         except Exception as e:
