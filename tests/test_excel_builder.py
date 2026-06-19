@@ -2,7 +2,7 @@
 
 from openpyxl import load_workbook
 
-from excel_builder import build_excel, SHEET_ORDER
+from excel_builder import build_excel, SHEET_ORDER, _sanitize_cell
 
 
 def test_build_excel_creates_all_sheets(tmp_path):
@@ -45,3 +45,30 @@ def test_build_excel_empty_sheet_has_placeholder(tmp_path):
     build_excel({}, str(out))
     ws = load_workbook(out)["vInfo"]
     assert ws["A1"].value == "No data collected"
+
+
+def test_sanitize_cell_neutralizes_formula_triggers():
+    assert _sanitize_cell("=1+1") == "'=1+1"
+    assert _sanitize_cell("+cmd") == "'+cmd"
+    assert _sanitize_cell("-2+3") == "'-2+3"
+    assert _sanitize_cell("@SUM(A1)") == "'@SUM(A1)"
+    # Safe values and non-strings pass through untouched.
+    assert _sanitize_cell("normal") == "normal"
+    assert _sanitize_cell(42) == 42
+    assert _sanitize_cell("") == ""
+
+
+def test_build_excel_defangs_formula_injection(tmp_path):
+    data = {
+        "vInfo": [
+            {"VM Name": "=HYPERLINK(\"http://evil\",\"x\")", "CPUs": 2},
+        ]
+    }
+    out = tmp_path / "out.xlsx"
+    build_excel(data, str(out))
+
+    ws = load_workbook(out)["vInfo"]
+    cell = ws["A2"]
+    # Stored as inert text, not a formula.
+    assert cell.data_type == "s"
+    assert cell.value.startswith("'=HYPERLINK")
