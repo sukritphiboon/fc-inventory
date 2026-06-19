@@ -131,16 +131,20 @@ class FCClient:
                             )
 
                         logger.debug(f"  -> HTTP {resp.status_code}")
-                        try:
-                            logger.debug(f"  -> Body: {resp.text[:300]}")
-                        except Exception:
-                            pass
 
                         if resp.status_code == 200:
                             self.port = port
                             self.base_url = f"https://{self.host}:{port}/service"
                             logger.info(f"Login OK! version={ver}, base_url={self.base_url}")
                             return self._extract_token(resp, label)
+
+                        # Log the body only on failure: a successful login
+                        # response carries the session token, which must not
+                        # be written to the log file.
+                        try:
+                            logger.debug(f"  -> Body: {resp.text[:300]}")
+                        except Exception:
+                            pass
 
                         body = resp.text[:200]
                         logger.warning(f"  -> Failed ({resp.status_code}): {body}")

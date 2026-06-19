@@ -37,6 +37,35 @@ def test_version_endpoint(client):
     assert resp.get_json()["version"] == app_module.__version__
 
 
+# ── cross-origin / CSRF protection ──────────────────────────
+
+
+def test_cross_origin_post_is_rejected(client):
+    resp = client.post(
+        "/api/collect",
+        json={"host": "h", "username": "u", "password": "p"},
+        headers={"Origin": "http://evil.example"},
+    )
+    assert resp.status_code == 403
+
+
+def test_same_origin_post_is_allowed(client):
+    # Matching Origin host passes the guard (then hits normal validation).
+    resp = client.post(
+        "/api/collect",
+        json={"host": "", "username": "", "password": ""},
+        headers={"Origin": "http://localhost"},
+        base_url="http://localhost",
+    )
+    # Not a 403 from the origin guard; fails later on missing fields instead.
+    assert resp.status_code == 400
+
+
+def test_get_requests_skip_origin_check(client):
+    resp = client.get("/api/progress", headers={"Origin": "http://evil.example"})
+    assert resp.status_code == 200
+
+
 def test_index_renders(client):
     resp = client.get("/")
     assert resp.status_code == 200
@@ -78,6 +107,20 @@ def test_collect_conflict_when_already_running(client):
     resp = client.post("/api/collect",
                        json={"host": "h", "username": "u", "password": "p"})
     assert resp.status_code == 409
+
+
+def test_collect_rejects_invalid_port(client):
+    resp = client.post("/api/collect",
+                       json={"host": "h", "username": "u", "password": "p",
+                             "port": "notaport"})
+    assert resp.status_code == 400
+
+
+def test_collect_rejects_out_of_range_port(client):
+    resp = client.post("/api/collect",
+                       json={"host": "h", "username": "u", "password": "p",
+                             "port": 70000})
+    assert resp.status_code == 400
 
 
 def test_collect_starts_job(client, monkeypatch):

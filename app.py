@@ -13,6 +13,7 @@ import logging.handlers
 import threading
 import webbrowser
 from datetime import datetime
+from urllib.parse import urlparse
 
 from flask import Flask, render_template, request, jsonify, send_file
 
@@ -56,6 +57,26 @@ current_job = {
     "thread": None,
     "output_file": None,
 }
+
+
+@app.before_request
+def _reject_cross_origin():
+    """Lightweight CSRF / drive-by protection for state-changing requests.
+
+    The tool has no login, so a malicious web page could otherwise POST to the
+    local server (CSRF). Browsers always attach an ``Origin`` header on
+    cross-origin requests; reject those whose origin host does not match the
+    request host. Non-browser clients (curl, the headless CLI) send no Origin
+    and are unaffected.
+    """
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return None
+    origin = request.headers.get("Origin")
+    if not origin:
+        return None
+    if urlparse(origin).netloc != request.host:
+        return jsonify({"error": "Cross-origin request rejected."}), 403
+    return None
 
 
 def _run_collection(collector):
@@ -104,12 +125,20 @@ def start_collection():
     # Parse request
     body = request.get_json(silent=True) or {}
     host = body.get("host", "").strip()
-    port = int(body.get("port", 7443))
     username = body.get("username", "").strip()
     password = body.get("password", "")
 
     if not host or not username or not password:
         return jsonify({"error": "Host, username, and password are required."}), 400
+
+    # Validate the port: reject non-numeric or out-of-range values up front
+    # instead of failing deep inside the request handler.
+    try:
+        port = int(body.get("port", 7443))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Port must be a number."}), 400
+    if not 1 <= port <= 65535:
+        return jsonify({"error": "Port must be between 1 and 65535."}), 400
 
     # Clean up old output file
     if current_job["output_file"] and os.path.exists(current_job["output_file"]):
